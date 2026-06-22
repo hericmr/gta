@@ -45,24 +45,19 @@ func _process(_delta):
 
 # ── Carregamento web (HTTPRequest) ──────────────────────────────────────────
 
-var _base_url = ""
+const URL_META = "https://hericmr.github.io/gta/assets/tiles/meta.json"
+const URL_JSON = "https://hericmr.github.io/gta/maps/santos.json"
 
 func _carregar_meta_web():
-	# Constrói URL absoluta a partir de window.location para evitar problemas
-	# com resolução de URL relativa no Godot 3 HTML5
-	var href = JavaScript.eval("window.location.href")
-	_base_url = href.substr(0, href.rfind("/") + 1)
-	print("[WorldOSM] base URL: ", _base_url)
-
 	var req = HTTPRequest.new()
 	add_child(req)
 	req.connect("request_completed", self, "_on_meta_carregado")
-	req.request(_base_url + "assets/tiles/meta.json")
+	req.request(URL_META)
 
 func _on_meta_carregado(result, code, _headers, body):
 	print("[WorldOSM] meta.json result=%d code=%d" % [result, code])
 	if result != OK or code != 200:
-		print("[WorldOSM] assets/tiles/meta.json não encontrado. Rode: python3 baixar_tiles.py")
+		print("[WorldOSM] assets/tiles/meta.json não encontrado.")
 		_fundo_fallback()
 	else:
 		var meta = parse_json(body.get_string_from_utf8())
@@ -75,12 +70,12 @@ func _on_meta_carregado(result, code, _headers, body):
 	var req = HTTPRequest.new()
 	add_child(req)
 	req.connect("request_completed", self, "_on_json_carregado")
-	req.request(_base_url + "maps/santos.json")
+	req.request(URL_JSON)
 
 func _on_json_carregado(result, code, _headers, body):
 	print("[WorldOSM] santos.json result=%d code=%d" % [result, code])
 	if result != OK or code != 200:
-		print("[WorldOSM] maps/santos.json não encontrado. Rode importar_santos.py")
+		print("[WorldOSM] maps/santos.json não encontrado.")
 		return
 	_dados = parse_json(body.get_string_from_utf8())
 	_finalizar()
