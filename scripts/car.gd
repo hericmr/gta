@@ -8,18 +8,30 @@ export var frenagem: float           = 900.0   # desaceleração ao frear
 export var velocidade_re: float      = 0.4     # fração da vel. máxima em ré
 
 var _vel: float = 0.0
+var _loader = null
 
-onready var _camera: Camera2D       = $Camera2D
+onready var _camera: Camera2D          = $Camera2D
 onready var _radio:  AudioStreamPlayer = $Radio
 
 signal velocidade_mudou(kmh)
 
 func _ready() -> void:
-	_radio.play()
 	_radio.connect("finished", self, "_on_radio_finished")
+	_loader = ResourceLoader.load_interactive("res://assets/radio/SLUS-00789_BIL001.mp3")
 
 func _on_radio_finished() -> void:
-	_radio.play()   # loop manual
+	_radio.play()
+
+func _process(_delta: float) -> void:
+	if _loader == null:
+		return
+	var err = _loader.poll()
+	if err == ERR_FILE_EOF:
+		_radio.stream = _loader.get_resource()
+		_radio.play()
+		_loader = null
+	elif err != OK:
+		_loader = null  # arquivo não encontrado, ignora sem travar
 
 func _physics_process(delta: float) -> void:
 	# ── Entrada ──────────────────────────────────────────────────────────────
