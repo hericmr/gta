@@ -2,15 +2,12 @@
 extends Node2D
 
 const CAMINHO_JSON  = "res://maps/santos.json"
-const CAMINHO_IMG   = "res://assets/satelite_santos.png"
-const CAMINHO_META  = "res://assets/satelite_meta.json"
+const CAMINHO_META  = "res://assets/tiles/meta.json"
 
 # 15 px ≈ 1 metro → carro (28 px) ≈ 1.9 m de largura
 const ESCALA = 15.0
 
-# Prédios com leve tint semi-transparente para destacar colisões sobre o satélite
 const COR_PREDIO = Color(0.55, 0.55, 0.60, 0.45)
-
 const PREDIOS_POR_FRAME = 60
 
 var _dados        = null
@@ -20,17 +17,19 @@ var _corpo_global = null
 func _ready():
 	scale = Vector2(ESCALA, ESCALA)
 
-	_carregar_satelite()
-	_carregar_json()
+	if OS.get_name() == "HTML5":
+		_carregar_meta_web()
+	else:
+		_carregar_satelite()
+		_carregar_json()
+		_finalizar()
 
+func _finalizar():
 	if _dados == null:
 		return
-
 	_criar_ruas_visual()
-
 	_corpo_global = StaticBody2D.new()
 	add_child(_corpo_global)
-
 	set_process(true)
 
 func _process(_delta):
@@ -44,38 +43,57 @@ func _process(_delta):
 		_criar_predio(_dados["predios"][i]["pontos"])
 	_indice = fim
 
-# ── Satélite ────────────────────────────────────────────────────────────────
+# ── Carregamento web (HTTPRequest) ──────────────────────────────────────────
+
+func _carregar_meta_web():
+	var req = HTTPRequest.new()
+	add_child(req)
+	req.connect("request_completed", self, "_on_meta_carregado")
+	req.request("assets/tiles/meta.json")
+
+func _on_meta_carregado(result, code, _headers, body):
+	if result != OK or code != 200:
+		print("[WorldOSM] assets/tiles/meta.json não encontrado. Rode: python3 baixar_tiles.py")
+		_fundo_fallback()
+	else:
+		var meta = parse_json(body.get_string_from_utf8())
+		var stream = load("res://scripts/satelite_stream.gd").new()
+		stream.inicializar(null, meta, "res://assets/tiles/")
+		add_child(stream)
+		set_meta("satelite_stream", stream)
+		print("[WorldOSM] Satellite streaming pronto (zoom %d)." % meta["zoom"])
+
+	var req = HTTPRequest.new()
+	add_child(req)
+	req.connect("request_completed", self, "_on_json_carregado")
+	req.request("maps/santos.json")
+
+func _on_json_carregado(result, code, _headers, body):
+	if result != OK or code != 200:
+		print("[WorldOSM] maps/santos.json não encontrado. Rode importar_santos.py")
+		return
+	_dados = parse_json(body.get_string_from_utf8())
+	_finalizar()
+
+# ── Carregamento desktop (File) ──────────────────────────────────────────────
 
 func _carregar_satelite():
 	var arq = File.new()
-	if not arq.file_exists("res://assets/tiles/meta.json"):
+	if not arq.file_exists(CAMINHO_META):
 		print("[WorldOSM] assets/tiles/meta.json não encontrado.")
 		print("[WorldOSM] Rode: python3 baixar_tiles.py")
 		_fundo_fallback()
 		return
 
-	arq.open("res://assets/tiles/meta.json", File.READ)
+	arq.open(CAMINHO_META, File.READ)
 	var meta = parse_json(arq.get_as_text())
 	arq.close()
 
 	var stream = load("res://scripts/satelite_stream.gd").new()
-	stream.inicializar(null, meta, "res://assets/tiles/")  # carro conectado depois pelo main.gd
+	stream.inicializar(null, meta, "res://assets/tiles/")
 	add_child(stream)
-
-	# Guarda referência para main.gd poder passar o carro
 	set_meta("satelite_stream", stream)
 	print("[WorldOSM] Satellite streaming pronto (zoom %d, raio %d tiles)." % [meta["zoom"], 4])
-
-func _fundo_fallback():
-	var bg = Polygon2D.new()
-	bg.polygon = PoolVector2Array([
-		Vector2(-1000, -1000), Vector2(10000, -1000),
-		Vector2(10000, 10000), Vector2(-1000, 10000)
-	])
-	bg.color = Color(0.18, 0.38, 0.65)
-	add_child(bg)
-
-# ── JSON OSM ────────────────────────────────────────────────────────────────
 
 func _carregar_json():
 	var arq = File.new()
@@ -86,16 +104,25 @@ func _carregar_json():
 	_dados = parse_json(arq.get_as_text())
 	arq.close()
 
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+func _fundo_fallback():
+	var bg = Polygon2D.new()
+	bg.polygon = PoolVector2Array([
+		Vector2(-1000, -1000), Vector2(10000, -1000),
+		Vector2(10000, 10000), Vector2(-1000, 10000)
+	])
+	bg.color = Color(0.18, 0.38, 0.65)
+	add_child(bg)
+
 func _criar_ruas_visual():
-	# Line2D levemente mais claros que o satélite para indicar colisão futura
-	# (opcional — pode remover se preferir só o satélite limpo)
 	for rua in _dados["ruas"]:
 		var linha = Line2D.new()
 		var pts   = PoolVector2Array()
 		for p in rua["pontos"]:
 			pts.append(Vector2(p[0], p[1]))
 		linha.points           = pts
-		linha.default_color    = Color(1, 1, 1, 0.06)   # branco bem sutil
+		linha.default_color    = Color(1, 1, 1, 0.06)
 		linha.width            = float(rua["largura"])
 		linha.joint_mode       = Line2D.LINE_JOINT_ROUND
 		linha.begin_cap_mode   = Line2D.LINE_CAP_ROUND
@@ -111,7 +138,6 @@ func _criar_predio(pontos):
 	forma.polygon = pool
 	_corpo_global.add_child(forma)
 
-	# Overlay semi-transparente para indicar que é uma parede sólida
 	var visual = Polygon2D.new()
 	visual.polygon = pool
 	visual.color   = COR_PREDIO
