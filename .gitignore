@@ -1,0 +1,23 @@
+# Godot
+.import/
+*.import
+*.tpz
+
+# Exportações que não são o build web principal
+santos-driver.*
+
+# Dados pesados não empacotáveis (já embutidos no .pck)
+santos-map/
+assets/satelite_santos.png
+assets/**/*.mp3
+assets/*.mp3
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+cache/
+output/
+
+# Outros
+*.pptx
