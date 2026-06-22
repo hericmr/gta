@@ -16,13 +16,9 @@ var _corpo_global = null
 
 func _ready():
 	scale = Vector2(ESCALA, ESCALA)
-
-	if OS.get_name() == "HTML5":
-		_carregar_meta_web()
-	else:
-		_carregar_satelite()
-		_carregar_json()
-		_finalizar()
+	_carregar_satelite()
+	_carregar_json()
+	_finalizar()
 
 func _finalizar():
 	if _dados == null:
@@ -43,50 +39,14 @@ func _process(_delta):
 		_criar_predio(_dados["predios"][i]["pontos"])
 	_indice = fim
 
-# ── Carregamento web (HTTPRequest) ──────────────────────────────────────────
-
-const URL_META = "https://hericmr.github.io/gta/assets/tiles/meta.json"
-const URL_JSON = "https://hericmr.github.io/gta/maps/santos.json"
-
-func _carregar_meta_web():
-	var req = HTTPRequest.new()
-	add_child(req)
-	req.connect("request_completed", self, "_on_meta_carregado")
-	req.request(URL_META)
-
-func _on_meta_carregado(result, code, _headers, body):
-	print("[WorldOSM] meta.json result=%d code=%d" % [result, code])
-	if result != OK or code != 200:
-		print("[WorldOSM] assets/tiles/meta.json não encontrado.")
-		_fundo_fallback()
-	else:
-		var meta = parse_json(body.get_string_from_utf8())
-		var stream = load("res://scripts/satelite_stream.gd").new()
-		stream.inicializar(null, meta, "res://assets/tiles/")
-		add_child(stream)
-		set_meta("satelite_stream", stream)
-		print("[WorldOSM] Satellite streaming pronto (zoom %d)." % meta["zoom"])
-
-	var req = HTTPRequest.new()
-	add_child(req)
-	req.connect("request_completed", self, "_on_json_carregado")
-	req.request(URL_JSON)
-
-func _on_json_carregado(result, code, _headers, body):
-	print("[WorldOSM] santos.json result=%d code=%d" % [result, code])
-	if result != OK or code != 200:
-		print("[WorldOSM] maps/santos.json não encontrado.")
-		return
-	_dados = parse_json(body.get_string_from_utf8())
-	_finalizar()
-
-# ── Carregamento desktop (File) ──────────────────────────────────────────────
+# ── Carregamento (File — funciona em desktop e HTML5 quando arquivos estão no .pck) ──
 
 func _carregar_satelite():
 	var arq = File.new()
 	if not arq.file_exists(CAMINHO_META):
 		print("[WorldOSM] assets/tiles/meta.json não encontrado.")
-		print("[WorldOSM] Rode: python3 baixar_tiles.py")
+		if OS.get_name() != "HTML5":
+			print("[WorldOSM] Rode: python3 baixar_tiles.py")
 		_fundo_fallback()
 		return
 
@@ -98,16 +58,17 @@ func _carregar_satelite():
 	stream.inicializar(null, meta, "res://assets/tiles/")
 	add_child(stream)
 	set_meta("satelite_stream", stream)
-	print("[WorldOSM] Satellite streaming pronto (zoom %d, raio %d tiles)." % [meta["zoom"], 4])
+	print("[WorldOSM] Satellite streaming pronto (zoom %d)." % meta["zoom"])
 
 func _carregar_json():
 	var arq = File.new()
 	if not arq.file_exists(CAMINHO_JSON):
-		print("[WorldOSM] maps/santos.json não encontrado. Rode importar_santos.py")
+		print("[WorldOSM] maps/santos.json não encontrado.")
 		return
 	arq.open(CAMINHO_JSON, File.READ)
 	_dados = parse_json(arq.get_as_text())
 	arq.close()
+	print("[WorldOSM] santos.json carregado.")
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
