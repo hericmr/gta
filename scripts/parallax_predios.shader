@@ -4,8 +4,8 @@ shader_type canvas_item;
 uniform vec2 player_pos_pre = vec2(0.0, 0.0);
 
 // Altura virtual da câmera em metros (menor = efeito mais dramático, faixa útil: 200–800)
-// Formula GTA 2: offset = (player_pos - vertex_pos) * altura_m / cam_height
-uniform float cam_height = -300.0;
+// Formula GTA 2: offset = (player_pos - vertex_pos5 * altura_m / cam_height
+uniform float cam_height = -200.0;
 
 // Cor do telhado (definida por tier ao criar o ShaderMaterial)
 uniform vec4 vis_color = vec4(0.5, 0.5, 0.5, 1.0);

@@ -1,7 +1,7 @@
 # car.gd — Física arcade do carro top-down (KinematicBody2D — Godot 3)
 extends KinematicBody2D
 
-export var velocidade_maxima: float  = 580.0
+export var velocidade_maxima: float  = 667.0
 export var aceleracao: float         = 400.0
 export var atrito: float             = 300.0
 export var frenagem: float           = 900.0
