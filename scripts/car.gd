@@ -30,6 +30,7 @@ onready var _radio:  AudioStreamPlayer = $Radio
 signal velocidade_mudou(kmh)
 
 func _ready() -> void:
+	_criar_sombra(Vector2(18, 44), Vector2(16, 26))
 	_radio.connect("finished", self, "_on_radio_finished")
 	_loader = ResourceLoader.load_interactive("res://assets/radio/SLUS-00789_BIL001.mp3")
 
@@ -109,6 +110,18 @@ func _physics_process(delta: float) -> void:
 	emit_signal("velocidade_mudou", abs(_vel) * 0.18)
 
 # ── Marcas de pneu ───────────────────────────────────────────────────────────
+
+func _criar_sombra(centro: Vector2, semi_eixos: Vector2) -> void:
+	var s = Polygon2D.new()
+	var pts = PoolVector2Array()
+	for i in range(16):
+		var a = 2.0 * PI * i / 16.0
+		pts.append(centro + Vector2(cos(a) * semi_eixos.x, sin(a) * semi_eixos.y))
+	s.polygon = pts
+	s.color   = Color(0, 0, 0, 0.32)
+	s.z_index = -1
+	add_child(s)
+	move_child(s, 0)
 
 func _adicionar_marca(p1: Vector2, p2: Vector2) -> void:
 	if p1.distance_squared_to(p2) < 4.0:

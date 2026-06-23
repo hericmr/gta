@@ -16,6 +16,9 @@ var _frame_atual = 0
 onready var _sprite : Sprite   = $Sprite
 onready var _camera : Camera2D = $Camera2D
 
+func _ready() -> void:
+	_criar_sombra(Vector2(1, 5), Vector2(9, 4))
+
 func _physics_process(delta: float) -> void:
 	if not ativo:
 		return
@@ -48,3 +51,15 @@ func _physics_process(delta: float) -> void:
 	else:
 		_frame_timer = 0.0
 		_sprite.frame = 0
+
+func _criar_sombra(centro: Vector2, semi_eixos: Vector2) -> void:
+	var s = Polygon2D.new()
+	var pts = PoolVector2Array()
+	for i in range(16):
+		var a = 2.0 * PI * i / 16.0
+		pts.append(centro + Vector2(cos(a) * semi_eixos.x, sin(a) * semi_eixos.y))
+	s.polygon = pts
+	s.color   = Color(0, 0, 0, 0.38)
+	s.z_index = -1
+	add_child(s)
+	move_child(s, 0)
