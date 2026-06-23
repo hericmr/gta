@@ -1,7 +1,7 @@
 # car.gd — Física arcade do carro top-down (KinematicBody2D — Godot 3)
 extends KinematicBody2D
 
-export var velocidade_maxima: float  = 500.0
+export var velocidade_maxima: float  = 580.0
 export var aceleracao: float         = 400.0
 export var atrito: float             = 300.0
 export var frenagem: float           = 900.0
@@ -16,10 +16,11 @@ const MAX_MARCAS       = 100     # segmentos de marca mantidos na cena
 const PNEU_ESQ_LOCAL   = Vector2(-3,  60)
 const PNEU_DIR_LOCAL   = Vector2(32,  60)
 
-var em_uso: bool        = false
+var em_uso: bool        = false setget _set_em_uso
 var _vel: float         = 0.0
 var _vel_lateral: float = 0.0
 var _loader             = null
+var _posicao_salva: float = 0.0
 var _marcas: Array      = []
 var _pneu_esq_ant       = null   # Vector2 | null
 var _pneu_dir_ant       = null
@@ -28,18 +29,45 @@ onready var _camera: Camera2D          = $Camera2D
 onready var _radio:  AudioStreamPlayer = $Radio
 onready var _visual: Polygon2D         = $Visual
 
+const FAIXAS = [
+	"res://assets/radio/radio1.mp3",
+	"res://assets/radio/SLUS-00789_BIL001.mp3",
+	"res://assets/radio/SLUS-00789_FRONTEND003.mp3",
+]
+var _faixa_atual: int = 0
+
 signal velocidade_mudou(kmh)
 
 func _ready() -> void:
 	_radio.connect("finished", self, "_on_radio_finished")
-	_loader = ResourceLoader.load_interactive("res://assets/radio/SLUS-00789_BIL001.mp3")
 
+func _set_em_uso(val: bool) -> void:
+	em_uso = val
+	if val:
+		_iniciar_radio()
+	else:
+		_posicao_salva = _radio.get_playback_position() if _radio.playing else _posicao_salva
+		_radio.stop()
+		_loader = null
+
+func _iniciar_radio() -> void:
+	_radio.stop()
+	_loader = ResourceLoader.load_interactive(FAIXAS[_faixa_atual])
 
 func _on_radio_finished() -> void:
-	_radio.play()
+	_faixa_atual = (_faixa_atual + 1) % FAIXAS.size()
+	_posicao_salva = 0.0
+	_iniciar_radio()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not em_uso:
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.scancode == KEY_TAB:
+		_faixa_atual = (_faixa_atual + 1) % FAIXAS.size()
+		_iniciar_radio()
 
 func _process(_delta: float) -> void:
-	if _loader == null:
+	if _loader == null or not em_uso:
 		return
 	var err = _loader.poll()
 	if err == ERR_FILE_EOF:
@@ -82,7 +110,7 @@ func _physics_process(delta: float) -> void:
 
 	# ── Rotação ──────────────────────────────────────────────────────────────
 	var fator: float = clamp(abs(_vel) / velocidade_maxima, 0.0, 1.0)
-	rotation_degrees += dir * 140.0 * fator * sign(_vel) * delta
+	rotation_degrees += dir * 195.0 * fator * sign(_vel) * delta
 
 	# ── Derrapagem lateral ───────────────────────────────────────────────────
 	if abs(dir) > 0.0 and abs(_vel) > 80.0:

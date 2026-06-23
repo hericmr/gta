@@ -19,21 +19,23 @@ from PIL import Image
 
 # ── Configuração ────────────────────────────────────────────────────────────
 
-# Mesma bbox do importar_santos.py
-BBOX = (-24.00, -46.43, -23.87, -46.27)
+# Bbox do mapa (deve bater com importar_santos.py)
+BBOX = (-23.995, -46.38, -23.905, -46.285)
 
-# Zoom 18 = ~0.55 m/pixel — visível individualmente na tela
 ZOOM = 18
 
-# ESRI World Imagery (sem chave de API)
+# OpenStreetMap padrão
 TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 TILE_PX   = 256
 
 TILES_DIR  = "assets/tiles"
 META_FILE  = "assets/tiles/meta.json"
 
-# Parâmetros do mapa (devem bater com importar_santos.py)
 LARGURA_MAP_PX = 8000
+
+# Range fixo de tiles (região do spawn — não calcular da bbox inteira)
+TX_MIN, TX_MAX = 97347, 97355
+TY_MIN, TY_MAX = 149066, 149074
 
 
 # ── Funções geográficas ─────────────────────────────────────────────────────
@@ -85,12 +87,8 @@ def main():
     min_lat, min_lon, max_lat, max_lon = BBOX
     altura_map_px = calcular_altura_map()
 
-    tx_min, ty_max = ll_to_tile(min_lat, min_lon, ZOOM)
-    tx_max, ty_min = ll_to_tile(max_lat, max_lon, ZOOM)
-
-    # 1 tile de margem
-    tx_min -= 1; ty_min -= 1
-    tx_max += 1; ty_max += 1
+    tx_min, tx_max = TX_MIN, TX_MAX
+    ty_min, ty_max = TY_MIN, TY_MAX
 
     nx    = tx_max - tx_min + 1
     ny    = ty_max - ty_min + 1

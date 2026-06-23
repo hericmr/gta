@@ -1,271 +1,279 @@
-# GTA Santos — Pipeline de Tiles de Referência
+# GTA Santos
 
-Gera tiles de referência a partir de dados reais de Santos/SP (OpenStreetMap),
-preparados para o fluxo de trabalho de um jogo top-down estilo GTA 2 no Godot 3,
-com arquitetura separada de **chão** e **prédios** para efeito 2.5D futuro.
+Jogo top-down estilo GTA 2 ambientado na cidade real de **Santos/SP**, feito em Godot 3. O mapa é gerado a partir de dados reais do OpenStreetMap e imagens de satélite. Ruas, quadras e colisões de prédios refletem a cidade como ela é.
+
+Jogável no browser: **[hericmr.github.io/gta](https://hericmr.github.io/gta)**
 
 ---
 
-## Instalação
+## O que tem no jogo
+
+- Mapa real de Santos gerado a partir do OpenStreetMap
+- Imagens de satélite carregadas por streaming conforme o jogador se move
+- Carro com física arcade: aceleração, frenagem, ré e derrapagem lateral
+- Marcas de pneu no asfalto durante derrapagens
+- Rádio dentro do carro com faixas de áudio
+- Colisões com prédios baseadas em dados reais do OSM
+- Transição a pé ↔ carro (tecla Enter)
+- Velocímetro no HUD
+- Zoom dinâmico da câmera conforme velocidade do carro
+- Exportado como HTML5 — roda direto no browser, sem instalação
+
+---
+
+## Controles
+
+| Tecla | Ação |
+|---|---|
+| `W` / `↑` | Acelerar / Andar para frente |
+| `S` / `↓` | Frear / Ré / Andar para trás |
+| `A` / `←` | Virar à esquerda |
+| `D` / `→` | Virar à direita |
+| `Enter` | Entrar / Sair do carro (quando próximo) |
+
+---
+
+## Tecnologias
+
+| Componente | Tecnologia |
+|---|---|
+| Engine | Godot 3.6 (GDScript) |
+| Exportação | HTML5 (WebAssembly) |
+| Mapa base | OpenStreetMap via Overpass API |
+| Imagens de satélite | ESRI World Imagery (zoom 18, tiles 256px) |
+| Pipeline de dados | Python 3 (sem framework — só stdlib + Pillow) |
+| Hospedagem | GitHub Pages |
+
+---
+
+## Arquitetura do projeto
+
+```
+gta_santos/
+├── scenes/
+│   ├── Main.tscn          ← cena raiz: junta World, Car, Player e HUD
+│   ├── WorldOSM.tscn      ← nó do mapa (ruas, prédios, satélite)
+│   ├── Car.tscn           ← carro dirigível
+│   ├── Player.tscn        ← personagem a pé
+│   └── HUD.tscn           ← velocímetro
+│
+├── scripts/
+│   ├── main.gd            ← spawn, transição a pé/carro, câmeras
+│   ├── car.gd             ← física arcade do carro + rádio + marcas de pneu
+│   ├── player.gd          ← movimentação e animação do personagem
+│   ├── world_osm.gd       ← carrega santos.json e meta.json; monta ruas/prédios
+│   ├── satelite_stream.gd ← streaming de tiles de satélite por posição
+│   └── hud.gd             ← atualiza label do velocímetro
+│
+├── assets/
+│   ├── carros/SP_021.png  ← sprite do carro
+│   ├── human/
+│   │   └── player_walk.png  ← spritesheet do personagem (5 frames)
+│   ├── radio/             ← faixas de áudio do rádio do carro (.mp3)
+│   └── tiles/
+│       ├── meta.json      ← bbox, zoom e dimensões do mapa de tiles
+│       └── z18_*.png      ← tiles de satélite (zoom 18, ESRI World Imagery)
+│
+├── maps/
+│   ├── santos.json        ← ruas e prédios de Santos (gerado por importar_santos.py)
+│   └── santos_osm_raw.json  ← dados brutos OSM (intermediário, não carregado pelo jogo)
+│
+├── importar_santos.py     ← baixa dados OSM e gera maps/santos.json
+├── baixar_tiles.py        ← baixa tiles de satélite para assets/tiles/
+├── generate_grid.py       ← gera tiles de referência para arte (chão + prédios)
+├── baixar_referencia.py   ← utilitário auxiliar de referência
+├── patch_html.py          ← pós-processa o HTML exportado pelo Godot
+├── planning.md            ← plano de implementação do modo multiplayer
+└── requirements.txt       ← dependências Python
+```
+
+---
+
+## Como o mapa funciona
+
+### Coordenadas
+
+O jogo usa um sistema de coordenadas planas derivado do bounding box de Santos:
+
+```
+bbox: lat [-23.995, -23.905]  lon [-46.38, -46.285]
+mapa: 8000 × 8292 px (pré-escala)
+ESCALA = 15.0  →  1 pixel pré-escala ≈ 1 metro
+
+Conversão lat/lon → posição Godot:
+  x = (lon - lon_min) / (lon_max - lon_min) * 8000  * 15
+  y = (1 - (lat - lat_min) / (lat_max - lat_min)) * 8292 * 15
+```
+
+Essa mesma lógica está implementada em `scripts/satelite_stream.gd` nas funções `_geo_para_game`, `_pos_para_lat` e `_pos_para_lon`.
+
+### Tiles de satélite
+
+O `satelite_stream.gd` mantém uma janela de **9×9 tiles** ao redor do jogador (raio 4). Conforme o jogador se move, tiles distantes são descarregados e novos são carregados do `.pck` (no HTML5) ou do disco (no desktop). Cada tile é um PNG de 256×256px do zoom 18 do ESRI World Imagery.
+
+### Ruas e prédios
+
+O `world_osm.gd` carrega `maps/santos.json`, que contém:
+- **`ruas`**: polylines com largura para desenho visual (sem colisão)
+- **`prédios`**: polígonos que viram `CollisionPolygon2D` + `Polygon2D` visual
+
+No HTML5 esses arquivos são buscados diretamente do GitHub Pages via `HTTPRequest`. No desktop são lidos do disco. Os prédios são instanciados em lotes de 60 por frame para não travar na inicialização.
+
+---
+
+## Rodando localmente (desktop)
+
+### Pré-requisitos
+
+- [Godot 3.6](https://godotengine.org/download/archive/3.6-stable/) (versão 3, não 4)
+- Python 3.11+ com pip
+
+### 1. Instalar dependências Python
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Python 3.11+.
+### 2. Baixar dados do mapa
+
+```bash
+# Gera maps/santos.json (ruas e prédios via OpenStreetMap)
+python3 importar_santos.py
+
+# Baixa tiles de satélite para assets/tiles/
+python3 baixar_tiles.py
+```
+
+`importar_santos.py` usa a Overpass API (gratuita, sem chave) e leva alguns minutos dependendo da conexão. `baixar_tiles.py` baixa ~81 tiles PNG do ESRI World Imagery.
+
+### 3. Abrir no Godot
+
+```
+Godot → Import → selecionar project.godot
+F5 para rodar
+```
+
+O jogo inicia com o carro e o player no centro de Santos.
 
 ---
 
-## Uso
+## Scripts Python
 
-### Tile central de Santos (default)
+### `importar_santos.py`
 
-```bash
-python generate_grid.py
-```
-
-Gera o tile `(0,0)` na pasta `output/`.
-
-### Tiles específicos
+Consulta a Overpass API do OSM e gera `maps/santos.json`.
 
 ```bash
-python generate_grid.py --tiles 0,0 1,0 0,1 -1,0
+python3 importar_santos.py
 ```
 
-### Área por bounding box
+**O que faz:**
+1. Baixa todas as ruas (`highway=*`) dentro do bbox de Santos
+2. Baixa todos os prédios (`building=*`)
+3. Converte lat/lon para coordenadas de pixel (pré-escala)
+4. Calcula largura de cada rua por tipo (motorway → 12px, residential → 4px, etc.)
+5. Salva `maps/santos.json` com arrays de `ruas` e `predios`
+
+Não precisa de biblioteca externa — usa só `urllib` e `json` da stdlib.
+
+### `baixar_tiles.py`
+
+Baixa tiles de satélite (ESRI World Imagery, zoom 18) e salva em `assets/tiles/`.
 
 ```bash
-python generate_grid.py --bbox -23.98 -46.35 -23.94 -46.30
+python3 baixar_tiles.py
 ```
 
-### Tile maior / mais detalhado
+**O que faz:**
+1. Calcula o range de tiles XY que cobre o bbox de Santos no zoom 18
+2. Baixa cada tile como PNG com delay de 0.3s entre requests (respeita rate limit)
+3. Salva como `z18_<tx>_<ty>.png`
+4. Gera `assets/tiles/meta.json` com bbox, dimensões e range de tiles
+
+Dependência: `Pillow` (só para verificar integridade dos PNGs).
+
+### `generate_grid.py`
+
+Gera tiles de **referência visual** para uso como base de arte do jogo. Não é usado em runtime pelo Godot — é uma ferramenta de desenvolvimento para quando você quiser desenhar tiles estilizados GTA por cima da planta real.
 
 ```bash
-# 512m por tile, 512px de saída
-python generate_grid.py --tile-meters 512 --tile-px 512 --tiles 0,0
+# Tile central de Santos
+python3 generate_grid.py
 
-# tile menor, mais granular (128m)
-python generate_grid.py --tile-meters 128 --tile-px 256 --tiles 0,0 1,0
+# Área por bounding box
+python3 generate_grid.py --bbox -23.98 -46.35 -23.94 -46.30
+
+# Tile maior
+python3 generate_grid.py --tile-meters 512 --tile-px 512 --tiles 0,0
 ```
 
-> **Atenção**: `tile-meters` e `tile-px` ficam gravados em `grid.json` na primeira execução.
-> Todas as execuções seguintes devem usar os mesmos valores ou o script recusa.
+**Saídas em `output/`:**
+- `ground_ref_X_Y.png` — planta do chão com ruas, água e parques
+- `buildings_X_Y.json` — footprints e alturas dos prédios (para efeito 2.5D futuro)
+- `buildings_ref_X_Y.png` — footprints numerados (número = índice no JSON)
 
-### Altura padrão de prédios
+### `patch_html.py`
+
+Aplica patches no HTML exportado pelo Godot para habilitar SharedArrayBuffer (necessário para WebAssembly com threads) via cabeçalhos COOP/COEP usando um Service Worker.
 
 ```bash
-# Usa 5 andares (15m) como fallback quando OSM não informa
-python generate_grid.py --default-building-height 5
+python3 patch_html.py
 ```
+
+Executar depois de cada exportação HTML5 pelo Godot.
 
 ---
 
-## Saídas por tile
+## Exportando para HTML5
 
+```bash
+# 1. No Godot: Project → Export → HTML5 → Export Project
+#    Salvar como santos-gta.html na raiz do projeto
+
+# 2. Aplicar patch (SharedArrayBuffer / Service Worker)
+python3 patch_html.py
+
+# 3. Fazer push para GitHub Pages
+git add santos-gta.* coi-serviceworker.js
+git commit -m "update build"
+git push
 ```
-output/
-  grid.json                    ← manifesto da grade (não apague)
-  ground_ref_0_0.png           ← referência do chão para desenhar por cima
-  buildings_0_0.json           ← footprints + altura dos prédios
-  buildings_ref_0_0.png        ← footprints numerados (número = índice no JSON)
-  cache/                       ← dados OSM cacheados (delete para re-baixar)
-```
+
+O arquivo `coi-serviceworker.js` é o Service Worker que injeta os cabeçalhos COOP/COEP necessários para o WebAssembly rodar no browser.
 
 ---
 
-## Como a grade garante alinhamento
+## Física do carro
 
-A origem (`ox`, `oy`) é calculada **uma vez** e gravada em `grid.json`:
-
-```
-(x_raw, y_raw) = UTM(ref_lat=-23.9608, ref_lon=-46.3322)
-ox = floor(x_raw / tile_meters) * tile_meters
-oy = floor(y_raw / tile_meters) * tile_meters
-```
-
-O tile `(tx, ty)` sempre cobre exatamente:
-```
-xmin = ox + tx * tile_meters
-ymin = oy + ty * tile_meters
-xmax = xmin + tile_meters
-ymax = ymin + tile_meters
-```
-
-Expandir para a cidade inteira é só pedir mais tiles com `--tiles` ou `--bbox`.
-Nenhum tile existente muda de posição.
-
----
-
-## Dois fluxos de trabalho
-
-### Fluxo 1 — Chão (TileMap no Godot)
-
-```
-ground_ref_X_Y.png  →  desenha tile GTA 2 por cima  →  tile_X_Y.png
-                                                            ↓
-                                                     TileMap no Godot 3
-```
-
-1. Abra `ground_ref_X_Y.png` no seu editor de imagem.
-2. Desenhe o tile estilizado GTA 2 por cima (asfalto, calçadas, água, blocos).
-3. Salve como `tile_X_Y.png`.
-4. Monte o TileSet no Godot (ver seção Godot abaixo).
-
-### Fluxo 2 — Prédios (Sprites com altura no Godot)
-
-```
-buildings_X_Y.json + buildings_ref_X_Y.png
-        ↓
-  desenha cada prédio como sprite (top-down, visão do teto)
-        ↓
-  Sprite2D no Godot com position = centroid_px, atributo height_m
-        ↓
-  (futuro) shader/script lê height_m e aplica parallax 2.5D
-```
-
-1. Abra `buildings_ref_X_Y.png` — cada footprint tem um número.
-2. Número N no PNG = `buildings[N]` no JSON = `centroid_px` e `footprint_px`.
-3. Desenhe o sprite de topo do prédio N.
-4. No Godot, instancie o sprite com `position = centroid_px * world_scale`.
-5. Grave `height_m` como metadado do sprite (variável exportada ou resource).
-
----
-
-## Formato de `buildings_X_Y.json`
-
-```json
-{
-  "tile": [0, 0],
-  "origin_utm": [362752.0, 7346944.0],
-  "tile_meters": 256.0,
-  "tile_px": 256,
-  "crs": "EPSG:31983",
-  "m_per_level": 3.0,
-  "buildings": [
-    {
-      "id": "way/123456789",
-      "height_m": 12.0,
-      "height_source": "osm_height",
-      "levels": 4,
-      "footprint_px": [[10.5, 20.3], [45.0, 20.3], [45.0, 60.1], [10.5, 60.1], [10.5, 20.3]],
-      "centroid_px": [27.8, 40.2],
-      "tags": {
-        "building": "yes",
-        "building:levels": "4",
-        "height": "12",
-        "name": "Edifício Exemplo"
-      }
-    }
-  ]
-}
-```
-
-**Campos:**
-
-| Campo | Tipo | Descrição |
+| Parâmetro | Valor | Descrição |
 |---|---|---|
-| `id` | string | ID OSM (`way/N`) |
-| `height_m` | float | Altura em metros |
-| `height_source` | string | `"osm_height"` / `"osm_levels"` / `"default"` |
-| `levels` | int\|null | Andares (null se não disponível) |
-| `footprint_px` | `[[x,y],…]` | Polígono em pixels, origem topo-esquerdo do tile |
-| `centroid_px` | `[x,y]` | Centro do footprint em pixels |
-| `tags` | object | Tags OSM relevantes |
+| `velocidade_maxima` | 580 | Velocidade máxima (unidades/s) |
+| `aceleracao` | 400 | Taxa de aceleração |
+| `atrito` | 300 | Desaceleração natural |
+| `frenagem` | 900 | Desaceleração ao frear |
+| `velocidade_re` | 0.4 | Fator da velocidade de ré (40% da max) |
+| Rotação | 195°/s | Velocidade de virada em velocidade máxima |
+| Derrapagem lateral | até 280 u/s | Velocidade lateral máxima em curvas |
 
-**Convenção de pixels**: `py=0` = borda norte do tile, `py=tile_px` = borda sul.
-Mesma orientação do PNG (norte = topo).
-
----
-
-## Importar no Godot 3
-
-### TileMap (chão)
-
-1. Copie os `tile_X_Y.png` para `res://assets/tiles/`.
-2. Crie um recurso **TileSet** (`Project > New Resource > TileSet`).
-3. Abra o editor TileSet, clique em `+` → **New Single Tile** para cada PNG.
-   - Ou gere um spritesheet único e use **New Atlas** com Step = (tile_px, tile_px).
-4. Salve como `map.tres`.
-5. Adicione nó **TileMap** à cena.
-6. Em `Tile Set`, selecione `map.tres`.
-7. `Cell Size` = `(tile_px, tile_px)`.
-
-> Godot 3 usa `TileSet + TileMap` (não `TileMapLayer`, que é Godot 4).
-
-### Sprites de prédios
-
-```gdscript
-# Ao instanciar um prédio:
-var building = BuildingSprite.instance()
-building.position = Vector2(centroid_px.x, centroid_px.y) * WORLD_SCALE
-building.height_m = data["height_m"]
-add_child(building)
-```
+O HUD mostra a velocidade convertida para km/h aproximado (`vel * 0.18`).
 
 ---
 
-## Efeito 2.5D futuro (documentação do formato)
+## Próximos passos — Multiplayer
 
-O efeito é **parallax por altura** calculado em tempo real — não pré-renderizado.
+O plano de implementação de multiplayer com Supabase está detalhado em [`planning.md`](./planning.md). Em resumo:
 
-### Princípio
-
-Quando a câmera se move, o topo de um prédio alto desliza mais do que o chão,
-criando ilusão de volume. A fórmula:
-
-```
-deslocamento_topo = velocidade_camera * (height_m / REFERENCIA_ALTURA) * FATOR_PARALLAX
-```
-
-### Estrutura do sprite de prédio (preparar agora)
-
-Cada prédio deve ter dois elementos:
-- **Base**: sprite do topo do telhado, ancorado na posição `centroid_px` do chão.
-- **Fachada** (opcional): sprite lateral, visível abaixo da base.
-
-A âncora (`offset`) do sprite fica na borda **inferior** da imagem (base do prédio),
-não no centro. Assim o deslocamento desliza apenas o topo.
-
-### Script de parallax (esboço para implementar depois)
-
-```gdscript
-# BuildingSprite.gd
-export var height_m: float = 9.0
-
-const PARALLAX_FACTOR = 0.003  # ajuste por gameplay
-
-func _process(_delta):
-    var cam_offset = get_viewport().get_camera().offset
-    # Topo do prédio desliza contra o movimento da câmera
-    $Top.offset = -cam_offset * height_m * PARALLAX_FACTOR
-```
-
-### Por que `height_m` importa agora
-
-O dado já está no `buildings_X_Y.json`. Ao desenhar os sprites e instanciá-los
-no Godot com `height_m` como propriedade exportada, o efeito 2.5D é adicionado
-depois com zero refatoração — só plug o script acima.
+- Jogador informa sua rua ou usa GPS do browser para entrar no jogo na localização real
+- Posições são sincronizadas via Supabase (PostgreSQL + REST API gratuita)
+- Outros jogadores aparecem como sprites no mapa em tempo real
+- Geocodificação via Nominatim (OSM, gratuito, sem chave de API)
 
 ---
 
-## Ajustar o visual de referência
+## Dados e licenças
 
-Edite `GND` em `generate_grid.py`:
-
-```python
-GND = {
-    "bg":          "#f5f5f0",   # fundo
-    "water":       "#b8d4e8",   # água
-    "park":        "#c8dcc8",   # parques
-    "bld_fill":    "#dcdcd4",   # fill dos edifícios
-    "bld_edge":    "#888880",   # borda dos edifícios
-    "road_major":  "#1a1a1a",   # motorway/primary
-    "road_mid":    "#555555",   # secondary/tertiary
-    "road_minor":  "#888888",   # residential/service
-    "road_foot":   "#bbbbbb",   # calçadas/ciclovias
-}
-```
-
-Para apagar o cache e re-baixar dados OSM: `rm -rf output/cache/`.
+- **OpenStreetMap** — dados de ruas e prédios licenciados sob [ODbL](https://opendatacommons.org/licenses/odbl/)
+- **ESRI World Imagery** — tiles de satélite para uso não-comercial
+- **Godot Engine** — [MIT License](https://godotengine.org/license)
