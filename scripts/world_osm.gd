@@ -14,11 +14,18 @@ var _dados        = null
 var _indice       = 0
 var _corpo_global = null
 
+const URL_BASE   = "https://hericmr.github.io/gta"
+const URL_META   = URL_BASE + "/assets/tiles/meta.json"
+const URL_JSON   = URL_BASE + "/maps/santos.json"
+
 func _ready():
 	scale = Vector2(ESCALA, ESCALA)
-	_carregar_satelite()
-	_carregar_json()
-	_finalizar()
+	if OS.get_name() == "HTML5":
+		_fetch_json()
+	else:
+		_carregar_satelite()
+		_carregar_json()
+		_finalizar()
 
 func _finalizar():
 	if _dados == null:
@@ -39,21 +46,43 @@ func _process(_delta):
 		_criar_predio(_dados["predios"][i]["pontos"])
 	_indice = fim
 
-# ── Carregamento (File — funciona em desktop e HTML5 quando arquivos estão no .pck) ──
+# ── HTML5: busca diretamente do GitHub Pages via HTTPRequest ─────────────────
+
+func _fetch_json():
+	print("[WorldOSM] HTML5: buscando %s" % URL_JSON)
+	var req = HTTPRequest.new()
+	add_child(req)
+	req.connect("request_completed", self, "_on_json_carregado")
+	var err = req.request(URL_JSON)
+	if err != OK:
+		print("[WorldOSM] Erro ao iniciar request: %d" % err)
+		_fundo_fallback()
+
+func _on_json_carregado(result, code, _headers, body):
+	print("[WorldOSM] santos.json result=%d code=%d bytes=%d" % [result, code, body.size()])
+	if result != OK or code != 200:
+		print("[WorldOSM] Falha ao carregar santos.json")
+		_fundo_fallback()
+		return
+	_dados = parse_json(body.get_string_from_utf8())
+	if _dados == null:
+		print("[WorldOSM] Erro ao parsear JSON")
+		_fundo_fallback()
+		return
+	print("[WorldOSM] santos.json OK — %d ruas, %d prédios" % [len(_dados.get("ruas", [])), len(_dados.get("predios", []))])
+	_finalizar()
+
+# ── Desktop: File.open direto ────────────────────────────────────────────────
 
 func _carregar_satelite():
 	var arq = File.new()
 	if not arq.file_exists(CAMINHO_META):
-		print("[WorldOSM] assets/tiles/meta.json não encontrado.")
-		if OS.get_name() != "HTML5":
-			print("[WorldOSM] Rode: python3 baixar_tiles.py")
+		print("[WorldOSM] assets/tiles/meta.json não encontrado. Rode: python3 baixar_tiles.py")
 		_fundo_fallback()
 		return
-
 	arq.open(CAMINHO_META, File.READ)
 	var meta = parse_json(arq.get_as_text())
 	arq.close()
-
 	var stream = load("res://scripts/satelite_stream.gd").new()
 	stream.inicializar(null, meta, "res://assets/tiles/")
 	add_child(stream)
@@ -63,7 +92,7 @@ func _carregar_satelite():
 func _carregar_json():
 	var arq = File.new()
 	if not arq.file_exists(CAMINHO_JSON):
-		print("[WorldOSM] maps/santos.json não encontrado.")
+		print("[WorldOSM] maps/santos.json não encontrado. Rode importar_santos.py")
 		return
 	arq.open(CAMINHO_JSON, File.READ)
 	_dados = parse_json(arq.get_as_text())
