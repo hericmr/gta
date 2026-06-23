@@ -133,7 +133,7 @@ func _physics_process(delta: float) -> void:
 	_pneu_dir_ant = pneu_dir
 
 	# ── Zoom dinâmico ────────────────────────────────────────────────────────
-	var zoom_alvo: float = lerp(1.3, 0.80, fator)
+	var zoom_alvo: float = lerp(0.80, 1.3, fator)
 	_camera.zoom = lerp(_camera.zoom, Vector2(zoom_alvo, zoom_alvo), 4.0 * delta)
 
 	emit_signal("velocidade_mudou", abs(_vel) * 0.18)

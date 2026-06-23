@@ -258,6 +258,11 @@ func _criar_predio_2p5d(predio: Dictionary) -> void:
 	for p in pontos:
 		pool.append(Vector2(p[0], p[1]))
 
+	# ── Colisão: bloqueia carro e player ──────────────────────────────────────
+	var colisao = CollisionPolygon2D.new()
+	colisao.polygon = pool
+	_corpo_global.add_child(colisao)
+
 	# Faixa de altura para o ShaderMaterial certo
 	var tier: int
 	if   altura_m < 6.0:  tier = 0
