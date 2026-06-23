@@ -39,6 +39,11 @@ func _process(delta: float) -> void:
 		_stream = $World.get_meta("satelite_stream")
 		_stream._carro = $Car if _no_carro else $Player
 
+	var ref = $Car if _no_carro else $Player
+
+	# Parallax 2.5D: desloca telhados conforme a câmera se move
+	$World.atualizar_parallax(ref.position)
+
 	# Debug de coordenadas (a cada 1 s)
 	if _stream == null:
 		return
@@ -46,10 +51,9 @@ func _process(delta: float) -> void:
 	if _debug_t < 1.0:
 		return
 	_debug_t = 0.0
-	var ref  = $Car if _no_carro else $Player
-	var pos  = ref.position / 15.0
-	var lat  = _stream._pos_para_lat(pos.y)
-	var lon  = _stream._pos_para_lon(pos.x)
+	var pos = ref.position / 15.0
+	var lat = _stream._pos_para_lat(pos.y)
+	var lon = _stream._pos_para_lon(pos.x)
 	print("[POS] lat=%.6f  lon=%.6f" % [lat, lon])
 
 # ── Modos ────────────────────────────────────────────────────────────────────
