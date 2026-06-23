@@ -35,7 +35,7 @@ func _ready() -> void:
 	s.polygon   = _visual.polygon
 	s.position  = _visual.position
 	s.rotation  = _visual.rotation
-	s.scale     = _visual.scale * 1.08
+	s.scale     = _visual.scale * 1.25
 	s.color     = Color(0, 0, 0, 0.38)
 	s.z_index   = -1
 	add_child(s)
