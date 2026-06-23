@@ -21,8 +21,8 @@ func _ready() -> void:
 	s.hframes      = _sprite.hframes
 	s.vframes      = _sprite.vframes
 	s.frame        = _sprite.frame
-	s.position     = _sprite.position + Vector2(3, 4)
-	s.scale        = _sprite.scale * 1.4
+	s.position     = _sprite.position
+	s.scale        = _sprite.scale * 1.1
 	s.modulate     = Color(0, 0, 0, 0.45)
 	s.z_index      = -1
 	add_child(s)

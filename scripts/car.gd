@@ -33,9 +33,9 @@ signal velocidade_mudou(kmh)
 func _ready() -> void:
 	var s       = Polygon2D.new()
 	s.polygon   = _visual.polygon
-	s.position  = _visual.position + Vector2(5, 6)
+	s.position  = _visual.position
 	s.rotation  = _visual.rotation
-	s.scale     = _visual.scale * 1.18
+	s.scale     = _visual.scale * 1.08
 	s.color     = Color(0, 0, 0, 0.38)
 	s.z_index   = -1
 	add_child(s)
