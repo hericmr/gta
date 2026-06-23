@@ -22,3 +22,4 @@ scale = Vector2( 0.12, 0.12 )
 current = true
 smoothing_enabled = true
 smoothing_speed = 8.0
+zoom = Vector2( 0.4, 0.4 )
