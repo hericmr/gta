@@ -26,11 +26,20 @@ var _pneu_dir_ant       = null
 
 onready var _camera: Camera2D          = $Camera2D
 onready var _radio:  AudioStreamPlayer = $Radio
+onready var _visual: Polygon2D         = $Visual
 
 signal velocidade_mudou(kmh)
 
 func _ready() -> void:
-	_criar_sombra(Vector2(18, 44), Vector2(16, 26))
+	var s       = Polygon2D.new()
+	s.polygon   = _visual.polygon
+	s.position  = _visual.position + Vector2(5, 6)
+	s.rotation  = _visual.rotation
+	s.scale     = _visual.scale * 1.18
+	s.color     = Color(0, 0, 0, 0.38)
+	s.z_index   = -1
+	add_child(s)
+	move_child(s, 0)
 	_radio.connect("finished", self, "_on_radio_finished")
 	_loader = ResourceLoader.load_interactive("res://assets/radio/SLUS-00789_BIL001.mp3")
 
@@ -110,18 +119,6 @@ func _physics_process(delta: float) -> void:
 	emit_signal("velocidade_mudou", abs(_vel) * 0.18)
 
 # ── Marcas de pneu ───────────────────────────────────────────────────────────
-
-func _criar_sombra(centro: Vector2, semi_eixos: Vector2) -> void:
-	var s = Polygon2D.new()
-	var pts = PoolVector2Array()
-	for i in range(16):
-		var a = 2.0 * PI * i / 16.0
-		pts.append(centro + Vector2(cos(a) * semi_eixos.x, sin(a) * semi_eixos.y))
-	s.polygon = pts
-	s.color   = Color(0, 0, 0, 0.32)
-	s.z_index = -1
-	add_child(s)
-	move_child(s, 0)
 
 func _adicionar_marca(p1: Vector2, p2: Vector2) -> void:
 	if p1.distance_squared_to(p2) < 4.0:
