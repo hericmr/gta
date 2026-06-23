@@ -1,30 +1,82 @@
-# main.gd — Cena raiz: conecta sinais e passa referências (Godot 3)
+# main.gd — Cena raiz: spawn, câmeras e transição a pé ↔ carro (Godot 3)
 extends Node2D
 
-var _stream = null
-var _debug_t = 0.0
+const SPAWN       = Vector2(90672.0, 109801.3)
+const DIST_ENTRAR = 120.0  # pixels para detectar carro próximo
+
+var _stream    = null
+var _no_carro  = false
+var _debug_t   = 0.0
 
 func _ready() -> void:
-	var carro = $Car
-	var hud   = $HUD
-	var mundo = $World
+	var carro  = $Car
+	var player = $Player
+	var hud    = $HUD
+	var mundo  = $World
 
 	carro.connect("velocidade_mudou", hud, "atualizar_velocidade")
 
 	if mundo.has_meta("satelite_stream"):
 		_stream = mundo.get_meta("satelite_stream")
-		_stream._carro = carro
 
-	# Spawn: lat=-23.984451, lon=-46.308218
-	carro.position = Vector2(90672.0, 109801.3)
+	# Posiciona carro e player próximos
+	carro.position  = SPAWN
+	player.position = SPAWN + Vector2(80, 0)
+
+	# Começa a pé: player ativo, carro parado
+	_modo_a_pe()
 
 func _process(delta: float) -> void:
+	# Entrar / sair do carro com Enter
+	if Input.is_action_just_pressed("ui_accept"):
+		if _no_carro:
+			_sair_do_carro()
+		else:
+			_tentar_entrar_carro()
+
+	# Debug de coordenadas (a cada 1 s)
+	if _stream == null:
+		return
 	_debug_t += delta
-	if _debug_t < 1.0 or _stream == null:
+	if _debug_t < 1.0:
 		return
 	_debug_t = 0.0
+	var ref  = $Car if _no_carro else $Player
+	var pos  = ref.position / 15.0
+	var lat  = _stream._pos_para_lat(pos.y)
+	var lon  = _stream._pos_para_lon(pos.x)
+	print("[POS] lat=%.6f  lon=%.6f" % [lat, lon])
 
-	var pos = $Car.position / 15.0  # divide por ESCALA para coords pré-escala
-	var lat = _stream._pos_para_lat(pos.y)
-	var lon = _stream._pos_para_lon(pos.x)
-	print("[CAR] lat=%.6f  lon=%.6f" % [lat, lon])
+# ── Modos ────────────────────────────────────────────────────────────────────
+
+func _modo_a_pe() -> void:
+	var carro  = $Car
+	var player = $Player
+	_no_carro       = false
+	carro.em_uso    = false
+	player.ativo    = true
+	player.visible  = true
+	player.get_node("Camera2D").current = true
+	carro.get_node("Camera2D").current  = false
+	if _stream:
+		_stream._carro = player
+
+func _tentar_entrar_carro() -> void:
+	var player = $Player
+	var carro  = $Car
+	if player.position.distance_to(carro.position) > DIST_ENTRAR:
+		return
+	_no_carro       = true
+	player.ativo    = false
+	player.visible  = false
+	carro.em_uso    = true
+	carro.get_node("Camera2D").current  = true
+	player.get_node("Camera2D").current = false
+	if _stream:
+		_stream._carro = carro
+
+func _sair_do_carro() -> void:
+	var carro  = $Car
+	var player = $Player
+	player.position = carro.position + Vector2(80, 0)
+	_modo_a_pe()

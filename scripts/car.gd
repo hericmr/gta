@@ -7,8 +7,9 @@ export var atrito: float             = 300.0
 export var frenagem: float           = 900.0   # desaceleração ao frear
 export var velocidade_re: float      = 0.4     # fração da vel. máxima em ré
 
-var _vel: float = 0.0
-var _loader = null
+var em_uso: bool = false
+var _vel: float  = 0.0
+var _loader      = null
 
 onready var _camera: Camera2D          = $Camera2D
 onready var _radio:  AudioStreamPlayer = $Radio
@@ -34,6 +35,9 @@ func _process(_delta: float) -> void:
 		_loader = null  # arquivo não encontrado, ignora sem travar
 
 func _physics_process(delta: float) -> void:
+	if not em_uso:
+		return
+
 	# ── Entrada ──────────────────────────────────────────────────────────────
 	var av: float = 0.0
 	if Input.is_action_pressed("ui_up") or Input.is_key_pressed(KEY_W):
