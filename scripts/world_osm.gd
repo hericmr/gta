@@ -18,10 +18,14 @@ const URL_BASE   = "https://hericmr.github.io/gta"
 const URL_META   = URL_BASE + "/assets/tiles/meta.json"
 const URL_JSON   = URL_BASE + "/maps/santos.json"
 
+var _html5_json_ok  = false
+var _html5_meta_ok  = false
+
 func _ready():
 	scale = Vector2(ESCALA, ESCALA)
 	if OS.get_name() == "HTML5":
 		_fetch_json()
+		_fetch_meta()
 	else:
 		_carregar_satelite()
 		_carregar_json()
@@ -63,14 +67,47 @@ func _on_json_carregado(result, code, _headers, body):
 	if result != OK or code != 200:
 		print("[WorldOSM] Falha ao carregar santos.json")
 		_fundo_fallback()
+		_html5_json_ok = true
+		_verificar_html5_pronto()
 		return
 	_dados = parse_json(body.get_string_from_utf8())
 	if _dados == null:
 		print("[WorldOSM] Erro ao parsear JSON")
 		_fundo_fallback()
-		return
-	print("[WorldOSM] santos.json OK — %d ruas, %d prédios" % [len(_dados.get("ruas", [])), len(_dados.get("predios", []))])
-	_finalizar()
+	else:
+		print("[WorldOSM] santos.json OK — %d ruas, %d prédios" % [len(_dados.get("ruas", [])), len(_dados.get("predios", []))])
+	_html5_json_ok = true
+	_verificar_html5_pronto()
+
+func _fetch_meta():
+	print("[WorldOSM] HTML5: buscando %s" % URL_META)
+	var req = HTTPRequest.new()
+	add_child(req)
+	req.connect("request_completed", self, "_on_meta_carregado")
+	var err = req.request(URL_META)
+	if err != OK:
+		print("[WorldOSM] Erro ao iniciar request meta: %d" % err)
+		_html5_meta_ok = true
+		_verificar_html5_pronto()
+
+func _on_meta_carregado(result, code, _headers, body):
+	print("[WorldOSM] meta.json result=%d code=%d bytes=%d" % [result, code, body.size()])
+	if result == OK and code == 200:
+		var meta = parse_json(body.get_string_from_utf8())
+		if meta:
+			var stream = load("res://scripts/satelite_stream.gd").new()
+			stream.inicializar(null, meta, "res://assets/tiles/")
+			add_child(stream)
+			set_meta("satelite_stream", stream)
+			print("[WorldOSM] Satellite streaming pronto (HTML5, zoom %d)" % meta["zoom"])
+	else:
+		print("[WorldOSM] meta.json não carregado — sem satélite")
+	_html5_meta_ok = true
+	_verificar_html5_pronto()
+
+func _verificar_html5_pronto():
+	if _html5_json_ok and _html5_meta_ok:
+		_finalizar()
 
 # ── Desktop: File.open direto ────────────────────────────────────────────────
 

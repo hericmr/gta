@@ -31,15 +31,6 @@ onready var _visual: Polygon2D         = $Visual
 signal velocidade_mudou(kmh)
 
 func _ready() -> void:
-	var s      = Polygon2D.new()
-	s.polygon  = _visual.polygon
-	s.position = _visual.position
-	s.rotation = _visual.rotation
-	s.scale    = _visual.scale * 1.05
-	s.color    = Color(0, 0, 0, 0.42)
-	s.z_index  = -1
-	add_child(s)
-	move_child(s, 0)
 	_radio.connect("finished", self, "_on_radio_finished")
 	_loader = ResourceLoader.load_interactive("res://assets/radio/SLUS-00789_BIL001.mp3")
 

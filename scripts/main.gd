@@ -34,6 +34,11 @@ func _process(delta: float) -> void:
 		else:
 			_tentar_entrar_carro()
 
+	# Pega o stream assim que disponível (HTML5: carregamento async)
+	if _stream == null and $World.has_meta("satelite_stream"):
+		_stream = $World.get_meta("satelite_stream")
+		_stream._carro = $Car if _no_carro else $Player
+
 	# Debug de coordenadas (a cada 1 s)
 	if _stream == null:
 		return
