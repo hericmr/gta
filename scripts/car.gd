@@ -31,35 +31,18 @@ onready var _visual: Polygon2D         = $Visual
 signal velocidade_mudou(kmh)
 
 func _ready() -> void:
-	# 3 camadas: escala [1.05→1.25], sinuosidade e opacidade crescentes para fora
-	var escalas    = [1.05, 1.15, 1.25]
-	var opacidades = [0.42, 0.26, 0.10]
-	var amplitudes = [0.0,  2.0,  4.0]   # px de distorção senoidal por camada
-	for i in range(3):
-		var s      = Polygon2D.new()
-		s.polygon  = _sinuoso(_visual.polygon, amplitudes[i])
-		s.position = _visual.position
-		s.rotation = _visual.rotation
-		s.scale    = _visual.scale * escalas[i]
-		s.color    = Color(0, 0, 0, opacidades[i])
-		s.z_index  = -1
-		add_child(s)
-		move_child(s, 0)
+	var s      = Polygon2D.new()
+	s.polygon  = _visual.polygon
+	s.position = _visual.position
+	s.rotation = _visual.rotation
+	s.scale    = _visual.scale * 1.05
+	s.color    = Color(0, 0, 0, 0.42)
+	s.z_index  = -1
+	add_child(s)
+	move_child(s, 0)
 	_radio.connect("finished", self, "_on_radio_finished")
 	_loader = ResourceLoader.load_interactive("res://assets/radio/SLUS-00789_BIL001.mp3")
 
-func _sinuoso(pts: PoolVector2Array, amp: float) -> PoolVector2Array:
-	if amp == 0.0:
-		return pts
-	var r = PoolVector2Array()
-	var n = pts.size()
-	for i in range(n):
-		var t = float(i) / float(n)
-		r.append(pts[i] + Vector2(
-			sin(t * 5.0 * 2.0 * PI) * amp,
-			cos(t * 5.0 * 2.0 * PI + 1.3) * amp
-		))
-	return r
 
 func _on_radio_finished() -> void:
 	_radio.play()
