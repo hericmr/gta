@@ -10,24 +10,28 @@ const N_FRAMES       = 8
 var ativo        = true
 var _frame_timer = 0.0
 var _frame_atual = 0
-var _sombra      : Sprite = null
+var _sombras     : Array = []
 
 onready var _sprite : Sprite   = $Sprite
 onready var _camera : Camera2D = $Camera2D
 
 func _ready() -> void:
-	var s          = Sprite.new()
-	s.texture      = _sprite.texture
-	s.hframes      = _sprite.hframes
-	s.vframes      = _sprite.vframes
-	s.frame        = _sprite.frame
-	s.position     = _sprite.position
-	s.scale        = _sprite.scale * 1.25
-	s.modulate     = Color(0, 0, 0, 0.45)
-	s.z_index      = -1
-	add_child(s)
-	move_child(s, 0)
-	_sombra = s
+	# 3 camadas: escala [1.05→1.25], opacidade decrescente → sombra escura com borda difusa
+	var escalas    = [1.05, 1.15, 1.25]
+	var opacidades = [0.42, 0.26, 0.10]
+	for i in range(3):
+		var s      = Sprite.new()
+		s.texture  = _sprite.texture
+		s.hframes  = _sprite.hframes
+		s.vframes  = _sprite.vframes
+		s.frame    = 0
+		s.position = _sprite.position
+		s.scale    = _sprite.scale * escalas[i]
+		s.modulate = Color(0, 0, 0, opacidades[i])
+		s.z_index  = -1
+		add_child(s)
+		move_child(s, 0)
+		_sombras.append(s)
 
 func _physics_process(delta: float) -> void:
 	if not ativo:
@@ -62,4 +66,5 @@ func _physics_process(delta: float) -> void:
 		_frame_timer  = 0.0
 		_sprite.frame = 0
 
-	_sombra.frame = _sprite.frame
+	for s in _sombras:
+		s.frame = _sprite.frame
