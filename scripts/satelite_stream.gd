@@ -84,9 +84,18 @@ func _atualizar_tiles(tx_center: int, ty_center: int) -> void:
 func _carregar_tile(tx: int, ty: int) -> void:
 	var arquivo = _base + ("z%d_%d_%d.png" % [ZOOM, tx, ty])
 
-	var tex = load(arquivo)
+	var tex: Texture
+	if OS.get_name() == "HTML5":
+		tex = load(arquivo)
+	else:
+		var img = Image.new()
+		if img.load(ProjectSettings.globalize_path(arquivo)) != OK:
+			return
+		var it = ImageTexture.new()
+		it.create_from_image(img, 0)
+		tex = it
 	if tex == null:
-		return   # tile não disponível no .pck
+		return
 
 	var sprite = Sprite.new()
 	sprite.texture  = tex

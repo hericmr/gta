@@ -11,10 +11,6 @@ const ESCALA = 15.0
 const PREDIOS_OSM_POR_FRAME  = 60
 const PREDIOS_2P5D_POR_FRAME = 400
 
-# Sombra: offset em unidades pré-ESCALA por metro de altura
-const SOMBRA_DIR   = Vector2(0.30, 0.60)
-const SOMBRA_ALPHA = 0.28
-
 # Perspectiva GTA 2: cores das 4 faixas de altura (roof e face/parede)
 const TIER_CORES_ROOF = [
 	Color(0.72, 0.70, 0.65, 0.50),  # < 6m  (1-2 andares)
@@ -269,18 +265,6 @@ func _criar_predio_2p5d(predio: Dictionary) -> void:
 	elif altura_m < 15.0: tier = 1
 	elif altura_m < 30.0: tier = 2
 	else:                 tier = 3
-
-	# ── Sombra: chão, sem perspectiva ─────────────────────────────────────────
-	if altura_m > 4.0:
-		var offset_s    = SOMBRA_DIR * altura_m
-		var pool_sombra = PoolVector2Array()
-		for v in pool:
-			pool_sombra.append(v + offset_s)
-		var sombra     = Polygon2D.new()
-		sombra.polygon = pool_sombra
-		sombra.color   = Color(0.0, 0.0, 0.0, clamp(SOMBRA_ALPHA * altura_m / 15.0, 0.06, SOMBRA_ALPHA))
-		sombra.z_index = -3
-		add_child(sombra)
 
 	# ── Face/parede: base do prédio, sem perspectiva ───────────────────────────
 	# Fica "atrás" do telhado; a borda não coberta pelo telhado revela a face lateral

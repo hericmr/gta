@@ -22,9 +22,9 @@ import time
 import requests
 
 # ── Constantes de mapa ────────────────────────────────────────────────────────
-LAT_MIN = -23.995;  LAT_MAX = -23.905
-LON_MIN = -46.380;  LON_MAX = -46.285
-LARG_PX = 8000.0;   ALT_PX  = 8292.0
+LAT_MIN = -23.987507;  LAT_MAX = -23.931034
+LON_MIN = -46.340332;  LON_MAX = -46.292267
+LARG_PX = 8960.0;      ALT_PX  = 11520.0
 
 AREA_MIN_M2  = 30     # filtra construções muito pequenas
 ALTURA_PAD   = 8.0    # altura padrão quando não há tag de altura (m)
@@ -147,7 +147,9 @@ def converter(dados: dict) -> list:
 
         tags     = el.get("tags", {})
         altura_m = extrair_altura(tags)
-        poly_px  = [lonlat_para_pre_escala(lon, lat) for lon, lat in coords_ll]
+        # coords_ll tem o ponto de fechamento repetido (GeoJSON ring); remove-o para Godot
+        coords_open = coords_ll[:-1]
+        poly_px  = [lonlat_para_pre_escala(lon, lat) for lon, lat in coords_open]
 
         predios.append({
             "osm_id":   el["id"],

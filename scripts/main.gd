@@ -1,7 +1,7 @@
 # main.gd — Cena raiz: spawn, câmeras e transição a pé ↔ carro (Godot 3)
 extends Node2D
 
-const SPAWN       = Vector2(90672.0, 109801.3)
+const SPAWN       = Vector2(90124.8, 163182.8)  # lat=-23.984364 lon=-46.308101
 const DIST_ENTRAR = 120.0  # pixels para detectar carro próximo
 
 var _stream    = null
@@ -25,6 +25,8 @@ func _ready() -> void:
 
 	# Começa a pé: player ativo, carro parado
 	_modo_a_pe()
+	hud.definir_ref(player)
+	$NpcTraffic.definir_ref(player)
 
 func _process(delta: float) -> void:
 	# Entrar / sair do carro com Enter
@@ -33,6 +35,10 @@ func _process(delta: float) -> void:
 			_sair_do_carro()
 		else:
 			_tentar_entrar_carro()
+
+	# Toggle mapa com M
+	if Input.is_action_just_pressed("mapa_toggle"):
+		$Mapa.toggle()
 
 	# Pega o stream assim que disponível (HTML5: carregamento async)
 	if _stream == null and $World.has_meta("satelite_stream"):
@@ -43,6 +49,10 @@ func _process(delta: float) -> void:
 
 	# Parallax 2.5D: desloca telhados conforme a câmera se move
 	$World.atualizar_parallax(ref.position)
+
+	# Atualiza mapa se visível
+	if $Mapa.visible:
+		$Mapa.atualizar(ref.position, _stream)
 
 	# Debug de coordenadas (a cada 1 s)
 	if _stream == null:
@@ -83,9 +93,13 @@ func _tentar_entrar_carro() -> void:
 	player.get_node("Camera2D").current = false
 	if _stream:
 		_stream._carro = carro
+	$HUD.definir_ref(carro)
+	$NpcTraffic.definir_ref(carro)
 
 func _sair_do_carro() -> void:
 	var carro  = $Car
 	var player = $Player
 	player.position = carro.position + Vector2(80, 0)
 	_modo_a_pe()
+	$HUD.definir_ref(player)
+	$NpcTraffic.definir_ref(player)

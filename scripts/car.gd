@@ -1,7 +1,7 @@
 # car.gd — Física arcade do carro top-down (KinematicBody2D — Godot 3)
 extends KinematicBody2D
 
-export var velocidade_maxima: float  = 667.0
+export var velocidade_maxima: float  = 1374.0
 export var aceleracao: float         = 400.0
 export var atrito: float             = 300.0
 export var frenagem: float           = 900.0
@@ -10,11 +10,11 @@ export var velocidade_re: float      = 0.4
 # Derrapagem
 const ATRITO_LATERAL   = 380.0   # quão rápido a deriva some
 const MAX_VEL_LATERAL  = 280.0   # velocidade lateral máxima
-const LIMIAR_DERRAPA   = 70.0    # vel lateral mínima para desenhar marcas
+const LIMIAR_DERRAPA   = 20.0    # vel lateral mínima para desenhar marcas
 const MAX_MARCAS       = 100     # segmentos de marca mantidos na cena
 # Posições locais dos pneus traseiros (ajuste se o carro mudar de visual)
-const PNEU_ESQ_LOCAL   = Vector2(-3,  60)
-const PNEU_DIR_LOCAL   = Vector2(32,  60)
+const PNEU_ESQ_LOCAL   = Vector2(-7.5, 150)
+const PNEU_DIR_LOCAL   = Vector2(80,  150)
 
 var em_uso: bool        = false setget _set_em_uso
 var _vel: float         = 0.0
@@ -133,10 +133,10 @@ func _physics_process(delta: float) -> void:
 	_pneu_dir_ant = pneu_dir
 
 	# ── Zoom dinâmico ────────────────────────────────────────────────────────
-	var zoom_alvo: float = lerp(0.80, 1.3, fator)
+	var zoom_alvo: float = lerp(1.4, 2.2, fator)
 	_camera.zoom = lerp(_camera.zoom, Vector2(zoom_alvo, zoom_alvo), 4.0 * delta)
 
-	emit_signal("velocidade_mudou", abs(_vel) * 0.18)
+	emit_signal("velocidade_mudou", abs(_vel) * 0.131)
 
 # ── Marcas de pneu ───────────────────────────────────────────────────────────
 
