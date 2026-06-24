@@ -5,6 +5,8 @@
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource( 1 )
 
+[node name="Tween" type="Tween" parent="."]
+
 [node name="Control" type="Control" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -27,3 +29,24 @@ margin_right = 240.0
 margin_bottom = -58.0
 modulate = Color( 1, 0.8, 0.2, 1 )
 text = "real: 0 km/h"
+
+[node name="LabelScore" type="Label" parent="Control"]
+anchor_left = 1.0
+anchor_right = 1.0
+margin_left = -220.0
+margin_top = 12.0
+margin_right = -12.0
+margin_bottom = 52.0
+align = 2
+text = "0"
+
+[node name="LabelCombo" type="Label" parent="Control"]
+anchor_left = 0.5
+anchor_right = 0.5
+margin_left = -160.0
+margin_top = 80.0
+margin_right = 160.0
+margin_bottom = 160.0
+align = 1
+modulate = Color( 1, 1, 1, 0 )
+text = ""

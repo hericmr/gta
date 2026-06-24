@@ -66,6 +66,20 @@ func atropelar() -> void:
 	z_index = -1
 
 
+func reinicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
+	_morto = false
+	collision_layer = 8
+	collision_mask  = 1
+	z_index = 0
+	if _sprite:
+		_sprite.texture  = load("res://assets/human/player_walk.png")
+		_sprite.hframes  = N_FRAMES
+		_sprite.position = Vector2(0.0, -2.0)
+		_sprite.scale    = Vector2(2.08, 1.85)
+		_sprite.modulate = CORES[randi() % CORES.size()]
+	inicializar(wps, vel, start)
+
+
 func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 	_wps       = wps
 	_vel       = vel

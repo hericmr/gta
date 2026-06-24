@@ -118,7 +118,7 @@ func _physics_process(delta: float) -> void:
 
 	# ── Rotação ──────────────────────────────────────────────────────────────
 	var fator: float = clamp(abs(_vel) / velocidade_maxima, 0.0, 1.0)
-	rotation_degrees += dir * 195.0 * fator * sign(_vel) * delta
+	rotation_degrees += dir * 310.0 * fator * sign(_vel) * delta
 
 	# ── Derrapagem lateral ───────────────────────────────────────────────────
 	if abs(dir) > 0.0 and abs(_vel) > 80.0:
@@ -136,6 +136,7 @@ func _physics_process(delta: float) -> void:
 			if is_instance_valid(ped) and not ped._morto:
 				if position.distance_to(ped.position) < RAIO_ATROPELO:
 					ped.atropelar()
+					get_tree().call_group("hud", "registrar_atropelamento")
 
 	# ── Marcas de pneu ───────────────────────────────────────────────────────
 	var pneu_esq = to_global(PNEU_ESQ_LOCAL)

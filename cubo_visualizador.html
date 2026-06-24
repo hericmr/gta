@@ -6,16 +6,12 @@
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  background: #111;
-  color: #ddd;
+  background: #111; color: #ddd;
   font-family: 'Courier New', monospace;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 16px;
-  gap: 12px;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 16px; gap: 12px;
 }
-h1 { color: #7cf; font-size: 15px; letter-spacing: 2px; margin-bottom: 4px; }
+h1 { color: #7cf; font-size: 15px; letter-spacing: 2px; }
 .app { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
 canvas { border: 1px solid #444; display: block; cursor: crosshair; }
 .hint { font-size: 10px; color: #666; text-align: center; margin-top: 4px; }
@@ -23,45 +19,19 @@ canvas { border: 1px solid #444; display: block; cursor: crosshair; }
 .group { display: flex; flex-direction: column; gap: 5px; }
 .gtitle { font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #2a2a2a; padding-bottom: 3px; }
 .row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
-.row span { color: #7cf; min-width: 38px; text-align: right; }
+.row span { color: #7cf; min-width: 42px; text-align: right; }
 input[type=range] { width: 100%; accent-color: #7cf; }
-.color-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #aaa; }
+.color-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #aaa; margin-top: 4px; }
 .swatch { width: 32px; height: 20px; border-radius: 3px; border: 1px solid #555; cursor: pointer; padding: 0; }
 .check-row { display: flex; gap: 14px; font-size: 12px; align-items: center; }
 .check-row label { color: #ccc; cursor: pointer; }
-pre {
-  background: #0a0a0a;
-  padding: 8px;
-  border-radius: 4px;
-  font-size: 10px;
-  color: #4f8;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  line-height: 1.5;
-}
-button {
-  background: #0f2a1a;
-  border: 1px solid #4f8;
-  color: #4f8;
-  padding: 5px 12px;
-  cursor: pointer;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 11px;
-}
+pre { background: #0a0a0a; padding: 8px; border-radius: 4px; font-size: 10px; color: #4f8; white-space: pre-wrap; line-height: 1.5; }
+button { background: #0f2a1a; border: 1px solid #4f8; color: #4f8; padding: 5px 12px; cursor: pointer; border-radius: 4px; font-family: monospace; font-size: 11px; }
 button:hover { background: #1a4a2a; }
 .mode-row { display: flex; gap: 6px; flex-wrap: wrap; }
-.mode-btn {
-  background: #1a1a2a;
-  border: 1px solid #447;
-  color: #aac;
-  padding: 4px 8px;
-  cursor: pointer;
-  border-radius: 4px;
-  font-size: 10px;
-  font-family: monospace;
-}
-.mode-btn.active { background: #2a2a5a; border-color: #7cf; color: #7cf; }
+.mbtn { background: #1a1a2a; border: 1px solid #447; color: #aac; padding: 4px 8px; cursor: pointer; border-radius: 4px; font-size: 10px; font-family: monospace; }
+.mbtn.active { background: #2a2a5a; border-color: #7cf; color: #7cf; }
+.info-box { background: #0a1a0a; border: 1px solid #2a4a2a; border-radius: 4px; padding: 8px; font-size: 11px; color: #8c8; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -70,55 +40,54 @@ button:hover { background: #1a4a2a; }
 
   <div>
     <canvas id="c" width="480" height="480"></canvas>
-    <p class="hint">Arraste o ponto laranja para definir o offset</p>
+    <p class="hint">🟡 Câmera — arraste para ver o offset mudar &nbsp;|&nbsp; 🔵 Prédio — clique para reposicionar</p>
   </div>
 
   <div class="panel">
 
     <div class="group">
-      <div class="gtitle">Modo de renderização</div>
+      <div class="gtitle">Modo de parede</div>
       <div class="mode-row">
-        <button class="mode-btn active" onclick="setMode(0,this)">Só deslocado</button>
-        <button class="mode-btn" onclick="setMode(1,this)">Quads + base</button>
-        <button class="mode-btn" onclick="setMode(2,this)">Só quads</button>
+        <button class="mbtn active" onclick="setMode(0,this)">Deslocado</button>
+        <button class="mbtn" onclick="setMode(1,this)">Quads+base</button>
+        <button class="mbtn" onclick="setMode(2,this)">Só quads</button>
       </div>
     </div>
 
     <div class="group">
-      <div class="gtitle">Offset (px pré-ESCALA)</div>
-      <div class="row"><label>Offset X</label><span id="v-ox">0.5</span></div>
-      <input type="range" id="sl-ox" min="0" max="12" step="0.1" value="0.5">
-      <div class="row"><label>Offset Y</label><span id="v-oy">2.0</span></div>
-      <input type="range" id="sl-oy" min="0.5" max="15" step="0.1" value="2.0">
+      <div class="gtitle">Parâmetros</div>
+      <div class="row"><label>wall_px (pré-ESC)</label><span id="v-wp">3.0</span></div>
+      <input type="range" id="sl-wp" min="0.5" max="12" step="0.1" value="3.0">
+    </div>
+
+    <div class="group">
+      <div class="gtitle">Fórmula do offset</div>
+      <div class="info-box" id="offset-info">
+        offset = dir_câmera × wall_px<br>
+        X: <span id="inf-ox">0.00</span> px<br>
+        Y: <span id="inf-oy">0.00</span> px<br>
+        dir: (<span id="inf-dx">0.00</span>, <span id="inf-dy">0.00</span>)
+      </div>
     </div>
 
     <div class="group">
       <div class="gtitle">Forma do prédio</div>
       <div class="mode-row">
-        <button class="mode-btn active" onclick="setShape(0,this)">L</button>
-        <button class="mode-btn" onclick="setShape(1,this)">Rect</button>
-        <button class="mode-btn" onclick="setShape(2,this)">Irregular</button>
+        <button class="mbtn active" onclick="setShape(0,this)">L</button>
+        <button class="mbtn" onclick="setShape(1,this)">Rect</button>
+        <button class="mbtn" onclick="setShape(2,this)">Irregular</button>
       </div>
     </div>
 
     <div class="group">
       <div class="gtitle">Cores</div>
-      <div class="color-row">
-        <input type="color" class="swatch" id="c-roof" value="#c7bdad">
-        <span>Telhado &nbsp; z = -1</span>
-      </div>
-      <div class="color-row" style="margin-top:4px">
-        <input type="color" class="swatch" id="c-wall" value="#a09080">
-        <span>Parede &nbsp;&nbsp; z = -2</span>
-      </div>
-      <div class="color-row" style="margin-top:4px">
-        <input type="color" class="swatch" id="c-base" value="#7a7061">
-        <span>Base &nbsp;&nbsp;&nbsp;&nbsp; z = -3</span>
-      </div>
+      <div class="color-row"><input type="color" class="swatch" id="c-roof" value="#c7bdad"><span>Telhado &nbsp; z = -1</span></div>
+      <div class="color-row"><input type="color" class="swatch" id="c-wall" value="#a09080"><span>Parede &nbsp;&nbsp; z = -2</span></div>
+      <div class="color-row"><input type="color" class="swatch" id="c-base" value="#7a7061"><span>Base &nbsp;&nbsp;&nbsp;&nbsp; z = -3</span></div>
     </div>
 
     <div class="group">
-      <div class="gtitle">Camadas visíveis</div>
+      <div class="gtitle">Camadas</div>
       <div class="check-row">
         <input type="checkbox" id="sh-base" checked><label for="sh-base">Base</label>
         <input type="checkbox" id="sh-wall" checked><label for="sh-wall">Paredes</label>
@@ -127,7 +96,7 @@ button:hover { background: #1a4a2a; }
     </div>
 
     <div class="group">
-      <div class="gtitle">Código Godot gerado</div>
+      <div class="gtitle">Código Godot</div>
       <pre id="code-out"></pre>
       <button onclick="copiar()">📋 Copiar</button>
     </div>
@@ -139,59 +108,61 @@ button:hover { background: #1a4a2a; }
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 const W = 480, H = 480;
-const DS = 10; // display scale: px por unidade pré-ESCALA
-const OX = W / 2 - 15, OY = H / 2 + 5; // centro na canvas
+const DS = 9; // display scale: canvas px por unidade pré-ESCALA
 
-// Formas (em unidades pré-ESCALA, centradas em 0,0)
-const SHAPES = [
-  // L
-  [[-14,-18],[10,-18],[10,-4],[20,-4],[20,18],[-14,18]],
-  // Rect
-  [[-14,-18],[14,-18],[14,18],[-14,18]],
-  // Irregular
-  [[-12,-16],[8,-18],[15,-10],[18,5],[10,17],[-5,18],[-14,10],[-14,-8]],
-];
+// Centro do prédio na canvas
+let bldX = W/2 - 10, bldY = H/2 + 10;
+// Posição da câmera na canvas
+let camX = W/2 - 10, camY = H/2 + 150;
 
 let mode  = 0;
 let shape = 0;
-let offX  = 0.5;  // pré-ESCALA units
-let offY  = 2.0;
-let dragging = false;
+
+// Formas em unidades pré-ESCALA (centro 0,0)
+const SHAPES = [
+  [[-14,-18],[10,-18],[10,-4],[20,-4],[20,18],[-14,18]],         // L
+  [[-14,-18],[14,-18],[14,18],[-14,18]],                          // Rect
+  [[-12,-16],[8,-18],[16,-9],[18,5],[10,17],[-5,18],[-14,10],[-14,-8]], // Irregular
+];
 
 function poly() {
-  return SHAPES[shape].map(([x,y]) => [OX + x*DS, OY + y*DS]);
+  return SHAPES[shape].map(([x,y]) => [bldX + x*DS, bldY + y*DS]);
 }
 
-function shiftedPoly(p, sx, sy) {
-  return p.map(([x,y]) => [x + sx*DS, y + sy*DS]);
+// Calcula offset: direção câmera→prédio * wall_px
+function calcOffset() {
+  const wp  = +document.getElementById('sl-wp').value;
+  const dx  = bldX - camX;
+  const dy  = bldY - camY;
+  const len = Math.sqrt(dx*dx + dy*dy) || 1;
+  const nx  = dx/len, ny = dy/len;  // normalizado
+  return { ox: nx * wp * DS, oy: ny * wp * DS, nx, ny, wp };
 }
 
-// ── Desenho ──────────────────────────────────────────────────────────────────
+// ── Renderização ──────────────────────────────────────────────────────────────
 
 function fillPoly(pts, color) {
   ctx.beginPath();
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  pts.forEach(([x,y],i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
   ctx.closePath();
   ctx.fillStyle = color;
   ctx.fill();
 }
 
-function fillQuad(a, b, c, d, color) {
+function fillQuad(a,b,c,d, color) {
   ctx.beginPath();
-  ctx.moveTo(a[0],a[1]);
-  ctx.lineTo(b[0],b[1]);
-  ctx.lineTo(c[0],c[1]);
-  ctx.lineTo(d[0],d[1]);
+  ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]);
+  ctx.lineTo(c[0],c[1]); ctx.lineTo(d[0],d[1]);
   ctx.closePath();
   ctx.fillStyle = color;
   ctx.fill();
 }
 
 function render() {
-  const p   = poly();
-  const ps  = shiftedPoly(p, offX, offY);
-  const n   = p.length;
+  const o    = calcOffset();
+  const base = poly();                                              // base: fixa
+  const roof = base.map(([x,y]) => [x + o.ox, y + o.oy]);        // telhado: desloca
+  const n    = base.length;
   const cRoof = document.getElementById('c-roof').value;
   const cWall = document.getElementById('c-wall').value;
   const cBase = document.getElementById('c-base').value;
@@ -199,209 +170,179 @@ function render() {
   const shWall = document.getElementById('sh-wall').checked;
   const shRoof = document.getElementById('sh-roof').checked;
 
-  // Fundo
+  // Fundo (satélite simulado)
   ctx.fillStyle = '#253525';
-  ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#2d402d';
-  ctx.lineWidth = 1;
-  for (let x = 0; x < W; x += 32) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-  for (let y = 0; y < H; y += 32) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle = '#2c3c2c'; ctx.lineWidth = 1;
+  for (let x=0;x<W;x+=32){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for (let y=0;y<H;y+=32){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
 
-  // Norte/Sul indicator
-  ctx.fillStyle = '#444';
-  ctx.font = '10px Courier New';
-  ctx.fillText('N', W/2-4, 14);
-  ctx.fillText('S', W/2-4, H-4);
-
-  // z=-3: base (polígono deslocado)
-  if (shBase && (mode === 0 || mode === 1)) {
-    fillPoly(ps, cBase);
-  }
-
-  // z=-2: paredes (quads por aresta)
-  if (shWall && (mode === 1 || mode === 2)) {
-    for (let i = 0; i < n; i++) {
-      const a = p[i], b = p[(i+1)%n];
-      fillQuad(a, b, ps[(i+1)%n], ps[i], cWall);
-    }
-  }
-
-  // z=-1: telhado
-  if (shRoof) {
-    fillPoly(p, cRoof);
-  }
-
-  // Linhas de contorno sutis
-  if (shRoof) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    p.forEach(([x,y],i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
-    ctx.closePath();
-    ctx.stroke();
-  }
-
-  // Offset arrow
+  // Linha câmera → prédio
   ctx.beginPath();
-  ctx.setLineDash([4,3]);
-  ctx.strokeStyle = '#f90';
-  ctx.lineWidth = 1.5;
-  ctx.moveTo(OX, OY);
-  ctx.lineTo(OX + offX*DS, OY + offY*DS);
+  ctx.setLineDash([5,5]);
+  ctx.strokeStyle = 'rgba(255,200,0,0.25)';
+  ctx.lineWidth = 1;
+  ctx.moveTo(camX, camY);
+  ctx.lineTo(bldX, bldY);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Ponto arrastável
-  const dotX = OX + offX*DS, dotY = OY + offY*DS;
-  ctx.beginPath();
-  ctx.arc(dotX, dotY, 7, 0, Math.PI*2);
-  ctx.fillStyle = '#f90';
-  ctx.fill();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  // z=-3: base (fixa, posição original)
+  if (shBase && (mode===0||mode===1)) fillPoly(base, cBase);
 
-  updateCode();
+  // z=-2: quads de parede (ligam base → telhado)
+  if (shWall && (mode===1||mode===2)) {
+    for (let i=0;i<n;i++) {
+      const a=base[i], b=base[(i+1)%n];
+      fillQuad(a, b, roof[(i+1)%n], roof[i], cWall);
+    }
+  }
+
+  // z=-1: telhado (desloca com a câmera)
+  if (shRoof) {
+    fillPoly(roof, cRoof);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth=0.5;
+    ctx.beginPath();
+    roof.forEach(([x,y],i)=>i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));
+    ctx.closePath(); ctx.stroke();
+  }
+
+  // Bússola
+  ctx.fillStyle = '#557';
+  ctx.font = '10px Courier New';
+  ctx.fillText('N', W/2-4, 14);
+  ctx.fillText('S', W/2-4, H-4);
+  ctx.fillText('W', 4, H/2+4);
+  ctx.fillText('E', W-12, H/2+4);
+
+  // Câmera (ponto amarelo)
+  ctx.beginPath();
+  ctx.arc(camX, camY, 8, 0, Math.PI*2);
+  ctx.fillStyle = '#fc0';
+  ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth=1;
+  ctx.stroke();
+  ctx.fillStyle = '#111';
+  ctx.font = 'bold 9px Courier New';
+  ctx.fillText('C', camX-4, camY+3);
+
+  // Centro do prédio (ponto azul)
+  ctx.beginPath();
+  ctx.arc(bldX, bldY, 5, 0, Math.PI*2);
+  ctx.fillStyle = '#4af'; ctx.fill();
+
+  // Atualiza info
+  document.getElementById('inf-ox').textContent = (o.ox/DS).toFixed(2);
+  document.getElementById('inf-oy').textContent = (o.oy/DS).toFixed(2);
+  document.getElementById('inf-dx').textContent = o.nx.toFixed(2);
+  document.getElementById('inf-dy').textContent = o.ny.toFixed(2);
+
+  updateCode(o);
 }
 
-// ── Código Godot ─────────────────────────────────────────────────────────────
+// ── Godot code ────────────────────────────────────────────────────────────────
 
 function hexToVec(hex) {
-  const r = (parseInt(hex.slice(1,3),16)/255).toFixed(2);
-  const g = (parseInt(hex.slice(3,5),16)/255).toFixed(2);
-  const b = (parseInt(hex.slice(5,7),16)/255).toFixed(2);
+  const r=(parseInt(hex.slice(1,3),16)/255).toFixed(2);
+  const g=(parseInt(hex.slice(3,5),16)/255).toFixed(2);
+  const b=(parseInt(hex.slice(5,7),16)/255).toFixed(2);
   return `${r}, ${g}, ${b}, 1.0`;
 }
 
-function updateCode() {
-  const ratio = offY > 0 ? (offX/offY).toFixed(2) : '0.00';
-  const cRoof = document.getElementById('c-roof').value;
-  const cWall = document.getElementById('c-wall').value;
-  const cBase = document.getElementById('c-base').value;
-  const oy    = offY.toFixed(2);
+function updateCode(o) {
+  const wp  = o.wp.toFixed(1);
+  const cR  = document.getElementById('c-roof').value;
+  const cW  = document.getElementById('c-wall').value;
+  const cB  = document.getElementById('c-base').value;
 
-  let wallBlock = '';
-  if (mode === 0) {
-    wallBlock =
-`\t# Base deslocada (modo atual)
-\tvar pool_wall = PoolVector2Array()
-\tfor v in pool:
-\t    pool_wall.append(v + offset)
-\tvar face = Polygon2D.new()
-\tface.polygon = pool_wall
-\tface.color   = Color(${hexToVec(cBase)})
-\tface.z_index = -3
-\tadd_child(face)`;
-  } else if (mode === 1) {
-    wallBlock =
-`\t# Base deslocada
-\tvar pool_wall = PoolVector2Array()
-\tfor v in pool:
-\t    pool_wall.append(v + offset)
-\tvar face = Polygon2D.new()
-\tface.polygon = pool_wall
-\tface.color   = Color(${hexToVec(cBase)})
-\tface.z_index = -3
-\tadd_child(face)
-
-\t# Quads de parede
-\tvar n = pool.size()
+  let bloco = '';
+  if (mode===0) {
+    bloco =
+`\t# Base fica fixa (pool original, z=-3)
+\tface.polygon = pool
+\t# Telhado desloca em direção oposta à câmera
+\tvar dir    = (centro_predio - pos_player).normalized()
+\tvar offset = dir * wall_px
+\tfor v in pool: pool_roof.append(v + offset)
+\tvisual.polygon = pool_roof  # z = -1`;
+  } else if (mode===1) {
+    bloco =
+`\t# Base fixa (z=-3)
+\tface.polygon = pool
+\t# Telhado desloca (z=-1)
+\tvar dir    = (centro_predio - pos_player).normalized()
+\tvar offset = dir * wall_px
+\tfor v in pool: pool_roof.append(v + offset)
+\tvisual.polygon = pool_roof
+\t# Quads de parede base→telhado (z=-2)
 \tfor i in range(n):
-\t    var a = pool[i]
-\t    var b = pool[(i+1)%n]
-\t    var q = Polygon2D.new()
-\t    q.polygon = PoolVector2Array([a, b, b+offset, a+offset])
-\t    q.color   = Color(${hexToVec(cWall)})
-\t    q.z_index = -2
-\t    add_child(q)`;
+\t    var a=pool[i]; var b=pool[(i+1)%n]
+\t    quad.polygon=[a,b,pool_roof[i+1],pool_roof[i]]`;
   } else {
-    wallBlock =
-`\t# Só quads de parede (sem base deslocada)
-\tvar n = pool.size()
+    bloco =
+`\t# Só quads base→telhado (z=-2)
+\tvar dir    = (centro_predio - pos_player).normalized()
+\tvar offset = dir * wall_px
 \tfor i in range(n):
-\t    var a = pool[i]
-\t    var b = pool[(i+1)%n]
-\t    var q = Polygon2D.new()
-\t    q.polygon = PoolVector2Array([a, b, b+offset, a+offset])
-\t    q.color   = Color(${hexToVec(cWall)})
-\t    q.z_index = -2
-\t    add_child(q)`;
+\t    var a=pool[i]; var b=pool[(i+1)%n]
+\t    quad.polygon=[a,b,b+offset,a+offset]`;
   }
 
   document.getElementById('code-out').textContent =
-`var wall_px = clamp(altura_m * 0.15, 1.0, ${oy})
-var offset  = Vector2(wall_px * ${ratio}, wall_px)
+`# Atualizar a cada frame em atualizar_parallax():
+var wall_px = clamp(altura_m * 0.15, 1.0, ${wp})
+${bloco}
 
-${wallBlock}
-
-\t# Telhado
-\tvisual.color = Color(${hexToVec(cRoof)})
-\tvisual.z_index = -1`;
+# Cores:
+# Telhado: Color(${hexToVec(cR)})
+# Parede:  Color(${hexToVec(cW)})
+# Base:    Color(${hexToVec(cB)})`;
 }
 
 function copiar() {
   navigator.clipboard.writeText(document.getElementById('code-out').textContent);
 }
 
-// ── Controles ─────────────────────────────────────────────────────────────────
+// ── Eventos ───────────────────────────────────────────────────────────────────
 
-function setMode(m, btn) {
-  mode = m;
-  document.querySelectorAll('.mode-btn').forEach((b,i) => {
-    if (b.closest('.mode-row') === btn.closest('.mode-row'))
-      b.classList.toggle('active', b === btn);
-  });
-  render();
-}
-
-function setShape(s, btn) {
-  shape = s;
-  btn.closest('.mode-row').querySelectorAll('.mode-btn').forEach(b =>
-    b.classList.toggle('active', b === btn));
-  render();
-}
-
-document.getElementById('sl-ox').addEventListener('input', function() {
-  offX = +this.value;
-  document.getElementById('v-ox').textContent = offX.toFixed(1);
-  render();
-});
-document.getElementById('sl-oy').addEventListener('input', function() {
-  offY = +this.value;
-  document.getElementById('v-oy').textContent = offY.toFixed(1);
-  render();
-});
-['c-roof','c-wall','c-base'].forEach(id =>
-  document.getElementById(id).addEventListener('input', render));
-['sh-base','sh-wall','sh-roof'].forEach(id =>
-  document.getElementById(id).addEventListener('change', render));
-
-// ── Drag offset dot ───────────────────────────────────────────────────────────
+let draggingCam = false, draggingBld = false;
 
 canvas.addEventListener('mousedown', e => {
-  const r  = canvas.getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
-  const dx = mx - (OX + offX*DS), dy = my - (OY + offY*DS);
-  if (Math.sqrt(dx*dx + dy*dy) < 14) dragging = true;
+  const r=canvas.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  if (Math.hypot(mx-camX, my-camY) < 12) { draggingCam=true; return; }
+  if (Math.hypot(mx-bldX, my-bldY) < 10) { draggingBld=true; return; }
 });
 
 canvas.addEventListener('mousemove', e => {
-  if (!dragging) return;
-  const r  = canvas.getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
-  offX = Math.max(0,  (mx - OX) / DS);
-  offY = Math.max(0.1,(my - OY) / DS);
-  offX = Math.min(offX, 12);
-  offY = Math.min(offY, 15);
-  document.getElementById('sl-ox').value = offX.toFixed(1);
-  document.getElementById('sl-oy').value = offY.toFixed(1);
-  document.getElementById('v-ox').textContent = offX.toFixed(1);
-  document.getElementById('v-oy').textContent = offY.toFixed(1);
+  if (!draggingCam && !draggingBld) return;
+  const r=canvas.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  if (draggingCam) { camX=Math.max(10,Math.min(W-10,mx)); camY=Math.max(10,Math.min(H-10,my)); }
+  if (draggingBld) { bldX=Math.max(80,Math.min(W-80,mx)); bldY=Math.max(80,Math.min(H-80,my)); }
   render();
 });
 
-canvas.addEventListener('mouseup',    () => dragging = false);
-canvas.addEventListener('mouseleave', () => dragging = false);
+canvas.addEventListener('mouseup',    ()=>{ draggingCam=false; draggingBld=false; });
+canvas.addEventListener('mouseleave', ()=>{ draggingCam=false; draggingBld=false; });
+
+function setMode(m,btn) {
+  mode=m;
+  btn.closest('.mode-row').querySelectorAll('.mbtn').forEach(b=>b.classList.toggle('active',b===btn));
+  render();
+}
+function setShape(s,btn) {
+  shape=s;
+  btn.closest('.mode-row').querySelectorAll('.mbtn').forEach(b=>b.classList.toggle('active',b===btn));
+  render();
+}
+
+document.getElementById('sl-wp').addEventListener('input', function(){
+  document.getElementById('v-wp').textContent = (+this.value).toFixed(1);
+  render();
+});
+['c-roof','c-wall','c-base'].forEach(id=>document.getElementById(id).addEventListener('input',render));
+['sh-base','sh-wall','sh-roof'].forEach(id=>document.getElementById(id).addEventListener('change',render));
 
 render();
 </script>
