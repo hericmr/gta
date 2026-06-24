@@ -1,6 +1,8 @@
 # npc_traffic.gd — Carros NPC + Pedestres NPC nas ruas (Godot 3)
 extends Node2D
 
+const URL_JSON = "https://hericmr.github.io/gta/maps/santos.json"
+
 const ESCALA             = 15.0
 const MARGEM             = 600.0
 const LARGURA_MIN_CARRO  = 5     # ruas com largura < 5 → só pedestres
@@ -36,7 +38,13 @@ var _ref = null
 
 
 func _ready() -> void:
-	_carregar_ruas()
+	if OS.get_name() == "HTML5":
+		var req = HTTPRequest.new()
+		add_child(req)
+		req.connect("request_completed", self, "_on_json_carregado")
+		req.request(URL_JSON)
+	else:
+		_carregar_ruas()
 
 
 func definir_ref(no) -> void:
@@ -49,6 +57,15 @@ func definir_ref(no) -> void:
 				"res://scripts/npc_pedestre.gd", VEL_PED_MIN, VEL_PED_MAX, "_on_fim_ped")
 
 
+func _on_json_carregado(_result, code, _headers, body) -> void:
+	if code != 200:
+		push_warning("[Traffic] Falha HTTP ao carregar santos.json (code=%d)" % code)
+		return
+	var d = parse_json(body.get_string_from_utf8())
+	if d:
+		_processar_ruas(d)
+
+
 func _carregar_ruas() -> void:
 	var arq = File.new()
 	if not arq.file_exists("res://maps/santos.json"):
@@ -57,6 +74,11 @@ func _carregar_ruas() -> void:
 	arq.open("res://maps/santos.json", File.READ)
 	var d = parse_json(arq.get_as_text())
 	arq.close()
+	if d:
+		_processar_ruas(d)
+
+
+func _processar_ruas(d: Dictionary) -> void:
 	for rua in d.get("ruas", []):
 		var pts = rua["pontos"]
 		if len(pts) < MIN_PTS:
@@ -74,6 +96,9 @@ func _carregar_ruas() -> void:
 	print("[Traffic] carros:%d ped:%d  nós grafo carro:%d ped:%d" % [
 		_ruas_carro.size(), _ruas_ped.size(),
 		_grafo_carro.size(), _grafo_ped.size()])
+	# HTML5: definir_ref já foi chamado antes do fetch terminar → spawna agora
+	if _ref != null:
+		definir_ref(_ref)
 
 
 func _rect_visivel() -> Rect2:
