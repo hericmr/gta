@@ -3,6 +3,10 @@ extends Node2D
 
 const URL_JSON = "https://hericmr.github.io/gta/maps/santos.json"
 
+# preload garante inclusão no PCK ao exportar (load(variável) não é detectado)
+const NpcCarScript      = preload("res://scripts/npc_car.gd")
+const NpcPedestreScript = preload("res://scripts/npc_pedestre.gd")
+
 const ESCALA             = 15.0
 const MARGEM             = 600.0
 const LARGURA_MIN_CARRO  = 5     # ruas com largura < 5 → só pedestres
@@ -51,10 +55,10 @@ func definir_ref(no) -> void:
 	_ref = no
 	if _carros.empty() and not _ruas_carro.empty():
 		_spawnar_pool(_carros, _ruas_carro, N_CARROS, _car_wps, _car_ow,
-				"res://scripts/npc_car.gd", VEL_MIN, VEL_MAX, "_on_fim_carro")
+				NpcCarScript, VEL_MIN, VEL_MAX, "_on_fim_carro")
 	if _pedestres.empty() and not _ruas_ped.empty():
 		_spawnar_pool(_pedestres, _ruas_ped, N_PEDESTRES, _ped_wps, _ped_ow,
-				"res://scripts/npc_pedestre.gd", VEL_PED_MIN, VEL_PED_MAX, "_on_fim_ped")
+				NpcPedestreScript, VEL_PED_MIN, VEL_PED_MAX, "_on_fim_ped")
 
 
 func _on_json_carregado(_result, code, _headers, body) -> void:
@@ -139,12 +143,12 @@ func _verificar_pool(pool, ruas, wps_dict, ow_dict, script_path, v_min, v_max, c
 			_resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect)
 
 
-func _criar_npc(ruas, wps_dict, ow_dict, script_path, v_min, v_max, cb):
+func _criar_npc(ruas, wps_dict, ow_dict, script_res, v_min, v_max, cb):
 	var rect = _rect_visivel()
 	var info = _wps_fora_de_camera(ruas, rect)
 	if info.empty():
 		return null
-	var c = load(script_path).new()
+	var c = script_res.new()
 	add_child(c)
 	var vel = lerp(v_min, v_max, randf())
 	c.inicializar(info.wps, vel, info.start)
