@@ -19,7 +19,7 @@ const TIER_CORES_ROOF = [
 	Color(0.26, 0.25, 0.30, 1.0),   # 30m+   — torre cinza-azul
 ]
 const TIER_CORES_FACE = [
-	Color(0.48, 0.44, 0.38, 1.0),   # parede sul: mais escuro que o telhado
+	Color(0.48, 0.44, 0.38, 1.0),   # base (sombra): mais escuro que o telhado
 	Color(0.34, 0.32, 0.30, 1.0),
 	Color(0.22, 0.20, 0.22, 1.0),
 	Color(0.13, 0.12, 0.16, 1.0),
@@ -264,11 +264,11 @@ func _criar_predio_2p5d(predio: Dictionary) -> void:
 	elif altura_m < 30.0: tier = 2
 	else:                 tier = 3
 
-	# Offset pequeno proporcional à altura: 0.15 px/m, máx 3 px pré-ESCALA (~45px no mundo)
+	# Offset proporcional à altura: 0.15 px/m, máx 3 px pré-ESCALA (~45px no mundo)
 	var wall_px = clamp(altura_m * 0.15, 1.0, 3.0)
 	var offset  = Vector2(wall_px * 0.3, wall_px)
 
-	# ── Base (parede sul) — deslocada levemente para baixo/direita ────────────
+	# ── Base — polígono deslocado ─────────────────────────────────────────────
 	var pool_wall = PoolVector2Array()
 	for v in pool:
 		pool_wall.append(v + offset)

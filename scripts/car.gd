@@ -8,13 +8,16 @@ export var frenagem: float           = 900.0
 export var velocidade_re: float      = 0.4
 
 # Derrapagem
-const ATRITO_LATERAL   = 380.0   # quão rápido a deriva some
-const MAX_VEL_LATERAL  = 280.0   # velocidade lateral máxima
-const LIMIAR_DERRAPA   = 20.0    # vel lateral mínima para desenhar marcas
-const MAX_MARCAS       = 100     # segmentos de marca mantidos na cena
-# Posições locais dos pneus traseiros (ajuste se o carro mudar de visual)
+const ATRITO_LATERAL   = 380.0
+const MAX_VEL_LATERAL  = 280.0
+const LIMIAR_DERRAPA   = 20.0
+const MAX_MARCAS       = 100
 const PNEU_ESQ_LOCAL   = Vector2(-7.5, 150)
 const PNEU_DIR_LOCAL   = Vector2(80,  150)
+
+# Atropelamento: raio de detecção e limiar de velocidade (km/h)
+const RAIO_ATROPELO    = 45.0
+const VEL_ATROPELO_KMH = 60.0
 
 var em_uso: bool        = false setget _set_em_uso
 var _vel: float         = 0.0
@@ -125,6 +128,14 @@ func _physics_process(delta: float) -> void:
 
 	# ── Movimento (frente + deriva) ──────────────────────────────────────────
 	move_and_slide(-transform.y * _vel + transform.x * _vel_lateral, Vector2.ZERO)
+
+	# ── Atropelamento ────────────────────────────────────────────────────────
+	var kmh = abs(_vel) * 0.131
+	if kmh > VEL_ATROPELO_KMH:
+		for ped in get_tree().get_nodes_in_group("pedestres"):
+			if is_instance_valid(ped) and not ped._morto:
+				if position.distance_to(ped.position) < RAIO_ATROPELO:
+					ped.atropelar()
 
 	# ── Marcas de pneu ───────────────────────────────────────────────────────
 	var pneu_esq = to_global(PNEU_ESQ_LOCAL)

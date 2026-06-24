@@ -5,16 +5,15 @@ const DIST_WP   = 12.0
 const FPS_ANIM  = 8.0
 const N_FRAMES  = 5
 
-# Modulações de cor para variar a aparência (tinta sobre o sprite original)
 const CORES = [
-	Color(1.00, 1.00, 1.00),  # original
-	Color(0.70, 0.85, 1.00),  # azulado
-	Color(1.00, 0.75, 0.75),  # avermelhado
-	Color(0.75, 1.00, 0.75),  # esverdeado
-	Color(1.00, 0.92, 0.65),  # amarelado
-	Color(0.85, 0.75, 1.00),  # arroxeado
-	Color(0.65, 0.65, 0.65),  # cinza
-	Color(0.60, 0.40, 0.25),  # marrom
+	Color(1.00, 1.00, 1.00),
+	Color(0.70, 0.85, 1.00),
+	Color(1.00, 0.75, 0.75),
+	Color(0.75, 1.00, 0.75),
+	Color(1.00, 0.92, 0.65),
+	Color(0.85, 0.75, 1.00),
+	Color(0.65, 0.65, 0.65),
+	Color(0.60, 0.40, 0.25),
 ]
 
 var _wps:         PoolVector2Array = PoolVector2Array()
@@ -24,12 +23,14 @@ var _terminado:   bool  = false
 var _frame_timer: float = 0.0
 var _frame_atual: int   = 0
 var _sprite:      Sprite = null
+var _morto:       bool  = false
 
 signal chegou_ao_fim
 
 
 func _ready() -> void:
-	# Sprite idêntico ao Player.tscn
+	add_to_group("pedestres")
+
 	_sprite          = Sprite.new()
 	_sprite.texture  = load("res://assets/human/player_walk.png")
 	_sprite.hframes  = N_FRAMES
@@ -38,7 +39,6 @@ func _ready() -> void:
 	_sprite.modulate = CORES[randi() % CORES.size()]
 	add_child(_sprite)
 
-	# Colisão idêntica ao Player.tscn
 	var shape = CircleShape2D.new()
 	shape.radius = 7.9
 	var col = CollisionShape2D.new()
@@ -47,6 +47,23 @@ func _ready() -> void:
 
 	collision_layer = 8
 	collision_mask  = 1
+
+
+func atropelar() -> void:
+	if _morto:
+		return
+	_morto     = true
+	_terminado = true
+	collision_layer = 0
+	collision_mask  = 0
+	if _sprite:
+		_sprite.texture  = load("res://assets/human/SP_1111.png")
+		_sprite.hframes  = 1
+		_sprite.frame    = 0
+		_sprite.position = Vector2.ZERO
+		_sprite.scale    = Vector2(2.0, 2.0)
+		_sprite.modulate = Color(1, 1, 1, 1)
+	z_index = -1
 
 
 func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
@@ -61,6 +78,9 @@ func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _morto:
+		return
+
 	if _idx >= _wps.size():
 		if not _terminado:
 			_terminado = true
