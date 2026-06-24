@@ -38,6 +38,11 @@ var _faixa_atual: int = 0
 
 signal velocidade_mudou(kmh)
 
+
+func parar() -> void:
+	_vel         = 0.0
+	_vel_lateral = 0.0
+
 func _ready() -> void:
 	_radio.connect("finished", self, "_on_radio_finished")
 

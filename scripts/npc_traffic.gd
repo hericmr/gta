@@ -1,17 +1,38 @@
-# npc_traffic.gd — Pool de carros NPC que percorrem as ruas (Godot 3)
+# npc_traffic.gd — Carros NPC + Pedestres NPC nas ruas (Godot 3)
 extends Node2D
 
-const ESCALA       = 15.0
-const N_CARROS     = 20
+const ESCALA             = 15.0
+const MARGEM             = 600.0
+const LARGURA_MIN_CARRO  = 5     # ruas com largura < 5 → só pedestres
+
+# Carros
+const N_CARROS   = 20
+const VEL_MIN    = 250.0
+const VEL_MAX    = 530.0
+
+# Pedestres
+const N_PEDESTRES  = 30
+const VEL_PED_MIN  = 150.0
+const VEL_PED_MAX  = 210.0
+
 const RAIO_SPAWN   = 5000.0
 const RAIO_DESPAWN = 7500.0
-const VEL_MIN      = 250.0   # game units/s ≈ 33 km/h
-const VEL_MAX      = 530.0   # game units/s ≈ 70 km/h
-const MIN_PTS      = 4       # pontos mínimos para considerar a rua
+const MIN_PTS      = 4
 
-var _ruas:   Array = []   # Array de PoolVector2Array (game coords)
-var _carros: Array = []
-var _ref           = null  # nó do veículo ativo (player ou carro)
+var _ruas_carro:  Array      = []
+var _ruas_ped:    Array      = []
+var _grafo_carro: Dictionary = {}   # snap_key → [{wps, oneway}] saídas desse ponto
+var _grafo_ped:   Dictionary = {}
+
+var _carros:   Array      = []
+var _car_wps:  Dictionary = {}
+var _car_ow:   Dictionary = {}
+
+var _pedestres: Array      = []
+var _ped_wps:   Dictionary = {}
+var _ped_ow:    Dictionary = {}
+
+var _ref = null
 
 
 func _ready() -> void:
@@ -20,8 +41,12 @@ func _ready() -> void:
 
 func definir_ref(no) -> void:
 	_ref = no
-	if _carros.empty() and not _ruas.empty():
-		_spawnar_todos()
+	if _carros.empty() and not _ruas_carro.empty():
+		_spawnar_pool(_carros, _ruas_carro, N_CARROS, _car_wps, _car_ow,
+				"res://scripts/npc_car.gd", VEL_MIN, VEL_MAX, "_on_fim_carro")
+	if _pedestres.empty() and not _ruas_ped.empty():
+		_spawnar_pool(_pedestres, _ruas_ped, N_PEDESTRES, _ped_wps, _ped_ow,
+				"res://scripts/npc_pedestre.gd", VEL_PED_MIN, VEL_PED_MAX, "_on_fim_ped")
 
 
 func _carregar_ruas() -> void:
@@ -39,76 +64,206 @@ func _carregar_ruas() -> void:
 		var arr = PoolVector2Array()
 		for p in pts:
 			arr.append(Vector2(p[0] * ESCALA, p[1] * ESCALA))
-		_ruas.append(arr)
-	print("[Traffic] %d ruas carregadas" % _ruas.size())
+		var entrada = {"wps": arr, "oneway": rua.get("oneway", false)}
+		if rua.get("largura", 4) >= LARGURA_MIN_CARRO:
+			_ruas_carro.append(entrada)
+		else:
+			_ruas_ped.append(entrada)
+	_grafo_carro = _construir_grafo(_ruas_carro)
+	_grafo_ped   = _construir_grafo(_ruas_ped)
+	print("[Traffic] carros:%d ped:%d  nós grafo carro:%d ped:%d" % [
+		_ruas_carro.size(), _ruas_ped.size(),
+		_grafo_carro.size(), _grafo_ped.size()])
+
+
+func _rect_visivel() -> Rect2:
+	var vp  = get_viewport()
+	var inv = vp.get_canvas_transform().affine_inverse()
+	var sz  = vp.size
+	var tl  = inv.xform(Vector2.ZERO)
+	var br  = inv.xform(sz)
+	return Rect2(tl - Vector2(MARGEM, MARGEM),
+				 (br - tl) + Vector2(MARGEM * 2.0, MARGEM * 2.0))
 
 
 func _process(_delta: float) -> void:
-	if _ref == null or _ruas.empty():
+	if _ref == null:
 		return
-	for carro in _carros:
-		if is_instance_valid(carro) and \
-		   carro.position.distance_to(_ref.position) > RAIO_DESPAWN:
-			_resetar(carro)
+	var rect = _rect_visivel()
+	_verificar_pool(_carros, _ruas_carro, _car_wps, _car_ow,
+			"res://scripts/npc_car.gd", VEL_MIN, VEL_MAX, "_on_fim_carro", rect)
+	_verificar_pool(_pedestres, _ruas_ped, _ped_wps, _ped_ow,
+			"res://scripts/npc_pedestre.gd", VEL_PED_MIN, VEL_PED_MAX, "_on_fim_ped", rect)
 
 
-func _spawnar_todos() -> void:
-	for _i in range(N_CARROS):
-		var c = _criar_carro()
+# ── Genérico ──────────────────────────────────────────────────────────────────
+
+func _spawnar_pool(pool, ruas, n, wps_dict, ow_dict, script_path, v_min, v_max, cb) -> void:
+	for _i in range(n):
+		var c = _criar_npc(ruas, wps_dict, ow_dict, script_path, v_min, v_max, cb)
 		if c:
-			_carros.append(c)
+			pool.append(c)
 
 
-func _criar_carro():
-	var wps = _wps_aleatorios()
-	if wps.empty():
+func _verificar_pool(pool, ruas, wps_dict, ow_dict, script_path, v_min, v_max, cb, rect) -> void:
+	for npc in pool:
+		if not is_instance_valid(npc):
+			continue
+		if not rect.has_point(npc.position) and \
+		   npc.position.distance_to(_ref.position) > RAIO_DESPAWN:
+			_resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect)
+
+
+func _criar_npc(ruas, wps_dict, ow_dict, script_path, v_min, v_max, cb):
+	var rect = _rect_visivel()
+	var info = _wps_fora_de_camera(ruas, rect)
+	if info.empty():
 		return null
-	var c = load("res://scripts/npc_car.gd").new()
+	var c = load(script_path).new()
 	add_child(c)
-	var vel   = lerp(VEL_MIN, VEL_MAX, randf())
-	var start = randi() % wps.size()
-	c.inicializar(wps, vel, start)
-	c.connect("chegou_ao_fim", self, "_on_fim", [c])
+	var vel = lerp(v_min, v_max, randf())
+	c.inicializar(info.wps, vel, info.start)
+	wps_dict[c] = info.wps
+	ow_dict[c]  = info.oneway
+	c.connect("chegou_ao_fim", self, cb, [c])
 	return c
 
 
-func _resetar(carro) -> void:
-	var wps = _wps_aleatorios()
-	if wps.empty():
+func _resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect) -> void:
+	var info = _wps_fora_de_camera(ruas, rect)
+	if info.empty():
 		return
-	var vel = lerp(VEL_MIN, VEL_MAX, randf())
-	carro.inicializar(wps, vel, 0)
+	var vel = lerp(v_min, v_max, randf())
+	npc.inicializar(info.wps, vel, info.start)
+	wps_dict[npc] = info.wps
+	ow_dict[npc]  = info.oneway
 
 
-func _on_fim(carro) -> void:
+func _on_fim_carro(carro) -> void:
+	_on_fim_npc(carro, _ruas_carro, _grafo_carro, _car_wps, _car_ow, VEL_MIN, VEL_MAX)
+
+func _on_fim_ped(ped) -> void:
+	_on_fim_npc(ped, _ruas_ped, _grafo_ped, _ped_wps, _ped_ow, VEL_PED_MIN, VEL_PED_MAX)
+
+func _on_fim_npc(npc, ruas, grafo, wps_dict, ow_dict, v_min, v_max) -> void:
+	if not is_instance_valid(npc):
+		return
+
+	var wps_atual: PoolVector2Array = wps_dict.get(npc, PoolVector2Array())
+	var vel = lerp(v_min, v_max, randf())
+
+	# ── Tenta seguir a próxima rua conectada ─────────────────────────────────
+	if wps_atual.size() >= 2:
+		var fim   = wps_atual[wps_atual.size() - 1]
+		var chave = _snap_key(fim)
+		var saidas: Array = grafo.get(chave, [])
+		if not saidas.empty():
+			# Remove a rota de onde viemos (evita inversão trivial como única opção)
+			var inicio_atual = wps_atual[0]
+			var candidatas = []
+			for s in saidas:
+				# Filtra: rota que leva de volta ao início da rua atual
+				if s["wps"][s["wps"].size() - 1].distance_to(inicio_atual) > 50.0:
+					candidatas.append(s)
+			if candidatas.empty():
+				candidatas = saidas  # fallback: aceita qualquer saída
+			var proxima = candidatas[randi() % candidatas.size()]
+			npc.inicializar(proxima["wps"], vel, 0)
+			wps_dict[npc] = proxima["wps"]
+			ow_dict[npc]  = proxima["oneway"]
+			return
+
+	# ── Sem conexão no grafo: usa lógica anterior ─────────────────────────────
+	var rect = _rect_visivel()
+	if rect.has_point(npc.position):
+		if not ow_dict.get(npc, false):
+			var inv = _inverter(wps_atual)
+			if inv.size() > 0:
+				npc.inicializar(inv, vel, 0)
+				wps_dict[npc] = inv
+	else:
+		_resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect)
+
+
+func _wps_fora_de_camera(ruas, rect: Rect2) -> Dictionary:
+	for _t in range(80):
+		var rua = _rua_aleatoria_perto(ruas)
+		if rua.empty():
+			continue
+		var wps    = rua["wps"]
+		var oneway = rua["oneway"]
+		if not oneway and randi() % 2 == 0:
+			wps = _inverter(wps)
+		for i in range(wps.size()):
+			if not rect.has_point(wps[i]):
+				return {"wps": wps, "start": i, "oneway": oneway}
+	return {}
+
+
+func _rua_aleatoria_perto(ruas) -> Dictionary:
+	if ruas.empty():
+		return {}
+	if _ref == null:
+		return ruas[randi() % ruas.size()]
+	for _t in range(40):
+		var r = ruas[randi() % ruas.size()]
+		var meio = r["wps"][r["wps"].size() / 2]
+		if meio.distance_to(_ref.position) < RAIO_SPAWN:
+			return r
+	return ruas[randi() % ruas.size()]
+
+
+func _inverter(wps: PoolVector2Array) -> PoolVector2Array:
+	var inv = PoolVector2Array()
+	for i in range(wps.size() - 1, -1, -1):
+		inv.append(wps[i])
+	return inv
+
+
+# ── Grafo de conectividade ────────────────────────────────────────────────────
+
+func _snap_key(pos: Vector2) -> String:
+	return str(int(round(pos.x / ESCALA))) + "_" + str(int(round(pos.y / ESCALA)))
+
+
+func _construir_grafo(ruas: Array) -> Dictionary:
+	var grafo = {}
+	for rua in ruas:
+		var wps: PoolVector2Array = rua["wps"]
+		if wps.size() < 2:
+			continue
+		# Rua percorrida da frente para trás (entrada pelo início)
+		var k0 = _snap_key(wps[0])
+		if not grafo.has(k0):
+			grafo[k0] = []
+		grafo[k0].append({"wps": wps, "oneway": rua["oneway"]})
+		# Mão dupla: também pode ser percorrida do fim para a frente
+		if not rua["oneway"]:
+			var k1 = _snap_key(wps[wps.size() - 1])
+			if not grafo.has(k1):
+				grafo[k1] = []
+			grafo[k1].append({"wps": _inverter(wps), "oneway": false})
+	return grafo
+
+
+# ── API pública ───────────────────────────────────────────────────────────────
+
+func carro_mais_proximo(pos: Vector2, raio: float):
+	var melhor      = null
+	var melhor_dist = raio
+	for c in _carros:
+		if not is_instance_valid(c):
+			continue
+		var d = c.position.distance_to(pos)
+		if d < melhor_dist:
+			melhor_dist = d
+			melhor      = c
+	return melhor
+
+
+func remover_carro(carro) -> void:
+	_carros.erase(carro)
+	_car_wps.erase(carro)
+	_car_ow.erase(carro)
 	if is_instance_valid(carro):
-		_resetar(carro)
-
-
-func _wps_aleatorios() -> PoolVector2Array:
-	if _ruas.empty():
-		return PoolVector2Array()
-
-	var rua = PoolVector2Array()
-	var encontrou = false
-
-	if _ref != null:
-		for _t in range(40):
-			var r: PoolVector2Array = _ruas[randi() % _ruas.size()]
-			# verifica se o ponto central da rua está dentro do raio
-			var meio = r[r.size() / 2]
-			if meio.distance_to(_ref.position) < RAIO_SPAWN:
-				rua = r
-				encontrou = true
-				break
-
-	if not encontrou:
-		rua = _ruas[randi() % _ruas.size()]
-
-	# Inverte 50% das vezes para simular tráfego nos dois sentidos
-	if randi() % 2 == 0:
-		var inv = PoolVector2Array()
-		for i in range(rua.size() - 1, -1, -1):
-			inv.append(rua[i])
-		return inv
-	return rua
+		carro.queue_free()

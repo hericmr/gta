@@ -81,20 +81,31 @@ func _modo_a_pe() -> void:
 		_stream._carro = player
 
 func _tentar_entrar_carro() -> void:
-	var player = $Player
-	var carro  = $Car
-	if player.position.distance_to(carro.position) > DIST_ENTRAR:
-		return
+	var player     = $Player
+	var dist_carro = $Car.position.distance_to(player.position)
+
+	# Verifica se há NPC mais próximo que o $Car
+	var npc = $NpcTraffic.carro_mais_proximo(player.position, DIST_ENTRAR)
+	if npc != null and npc.position.distance_to(player.position) < dist_carro:
+		# Rouba o NPC: reposiciona $Car no lugar do NPC
+		$Car.parar()
+		$Car.position = npc.position
+		$Car.rotation = npc.rotation
+		$Car.get_node("Visual").color = npc.get_child(0).color
+		$NpcTraffic.remover_carro(npc)
+	elif dist_carro > DIST_ENTRAR:
+		return  # nenhum carro próximo
+
 	_no_carro       = true
-	player.ativo    = false
-	player.visible  = false
-	carro.em_uso    = true
-	carro.get_node("Camera2D").current  = true
-	player.get_node("Camera2D").current = false
+	$Player.ativo   = false
+	$Player.visible = false
+	$Car.em_uso     = true
+	$Car.get_node("Camera2D").current   = true
+	$Player.get_node("Camera2D").current = false
 	if _stream:
-		_stream._carro = carro
-	$HUD.definir_ref(carro)
-	$NpcTraffic.definir_ref(carro)
+		_stream._carro = $Car
+	$HUD.definir_ref($Car)
+	$NpcTraffic.definir_ref($Car)
 
 func _sair_do_carro() -> void:
 	var carro  = $Car

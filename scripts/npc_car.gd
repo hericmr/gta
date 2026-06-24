@@ -29,9 +29,10 @@ const POLIGONO = PoolVector2Array([
 	Vector2(29.854, 65.766),  Vector2(9.658, 65.766),
 ])
 
-var _wps: PoolVector2Array = PoolVector2Array()
-var _idx: int   = 0
-var _vel: float = 350.0
+var _wps:       PoolVector2Array = PoolVector2Array()
+var _idx:       int   = 0
+var _vel:       float = 350.0
+var _terminado: bool  = false
 
 signal chegou_ao_fim
 
@@ -55,15 +56,16 @@ func _ready() -> void:
 	col.position = Vector2(36.25, 87.5)
 	add_child(col)
 
-	# Colide com prédios (layer 1) mas não bloqueia o player
+	# Colide com prédios (layer 1) e com outros NPCs (layer 2); player passa por cima
 	collision_layer = 2
-	collision_mask  = 1
+	collision_mask  = 3
 
 
 func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
-	_wps = wps
-	_vel = vel
-	_idx = clamp(start, 0, max(0, wps.size() - 1))
+	_wps       = wps
+	_vel       = vel
+	_terminado = false
+	_idx       = clamp(start, 0, max(0, wps.size() - 1))
 	if _idx < _wps.size():
 		position = _wps[_idx]
 		if _idx + 1 < _wps.size():
@@ -73,7 +75,9 @@ func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 
 func _physics_process(_delta: float) -> void:
 	if _idx >= _wps.size():
-		emit_signal("chegou_ao_fim")
+		if not _terminado:
+			_terminado = true
+			emit_signal("chegou_ao_fim")
 		return
 
 	var diff = _wps[_idx] - position

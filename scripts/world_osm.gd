@@ -11,18 +11,18 @@ const ESCALA = 15.0
 const PREDIOS_OSM_POR_FRAME  = 60
 const PREDIOS_2P5D_POR_FRAME = 400
 
-# Perspectiva GTA 2: cores das 4 faixas de altura (roof e face/parede)
+# Cubo GTA2: telhado (face superior) e parede (face sul visível)
 const TIER_CORES_ROOF = [
-	Color(0.72, 0.70, 0.65, 0.50),  # < 6m  (1-2 andares)
-	Color(0.52, 0.50, 0.50, 0.62),  # 6-15m (3-5 andares)
-	Color(0.36, 0.34, 0.36, 0.72),  # 15-30m (5-10 andares)
-	Color(0.22, 0.20, 0.24, 0.83),  # 30m+  (torres)
+	Color(0.78, 0.74, 0.68, 1.0),   # < 6m   — concreto claro
+	Color(0.60, 0.58, 0.55, 1.0),   # 6-15m  — concreto médio
+	Color(0.42, 0.40, 0.42, 1.0),   # 15-30m — concreto escuro
+	Color(0.26, 0.25, 0.30, 1.0),   # 30m+   — torre cinza-azul
 ]
 const TIER_CORES_FACE = [
-	Color(0.52, 0.50, 0.46, 0.65),  # parede visível (mais escuro que o telhado)
-	Color(0.36, 0.35, 0.35, 0.75),
-	Color(0.24, 0.23, 0.24, 0.82),
-	Color(0.14, 0.13, 0.16, 0.90),
+	Color(0.48, 0.44, 0.38, 1.0),   # parede sul: mais escuro que o telhado
+	Color(0.34, 0.32, 0.30, 1.0),
+	Color(0.22, 0.20, 0.22, 1.0),
+	Color(0.13, 0.12, 0.16, 1.0),
 ]
 
 var _dados        = null   # santos.json
@@ -140,7 +140,7 @@ func _on_meta_carregado(result, code, _headers, body):
 		var meta = parse_json(body.get_string_from_utf8())
 		if meta:
 			var stream = load("res://scripts/satelite_stream.gd").new()
-			stream.inicializar(null, meta, "res://assets/tiles/")
+			stream.inicializar(null, meta, URL_BASE + "/assets/tiles/")
 			add_child(stream)
 			set_meta("satelite_stream", stream)
 			print("[WorldOSM] Satélite pronto (HTML5, zoom %d)" % meta["zoom"])
@@ -248,40 +248,42 @@ func _criar_predio_2p5d(predio: Dictionary) -> void:
 	var pontos   = predio["poly_px"]
 	var altura_m = float(predio.get("altura_m", 8.0))
 
-	# Coordenadas absolutas pré-ESCALA (visual.position = (0,0), WorldOSM tem scale=15)
-	# Assim VERTEX no shader = coords pré-ESCALA absolutas, sem WORLD_MATRIX
 	var pool = PoolVector2Array()
 	for p in pontos:
 		pool.append(Vector2(p[0], p[1]))
 
-	# ── Colisão: bloqueia carro e player ──────────────────────────────────────
+	# ── Colisão ────────────────────────────────────────────────────────────────
 	var colisao = CollisionPolygon2D.new()
 	colisao.polygon = pool
 	_corpo_global.add_child(colisao)
 
-	# Faixa de altura para o ShaderMaterial certo
+	# Tier de altura
 	var tier: int
 	if   altura_m < 6.0:  tier = 0
 	elif altura_m < 15.0: tier = 1
 	elif altura_m < 30.0: tier = 2
 	else:                 tier = 3
 
-	# ── Face/parede: base do prédio, sem perspectiva ───────────────────────────
-	# Fica "atrás" do telhado; a borda não coberta pelo telhado revela a face lateral
-	if altura_m > 3.0:
-		var face     = Polygon2D.new()
-		face.polygon = pool
-		face.color   = TIER_CORES_FACE[tier]
-		face.z_index = -2
-		add_child(face)
+	# Offset pequeno proporcional à altura: 0.15 px/m, máx 3 px pré-ESCALA (~45px no mundo)
+	var wall_px = clamp(altura_m * 0.15, 1.0, 3.0)
+	var offset  = Vector2(wall_px * 0.3, wall_px)
 
-	# ── Telhado: perspectiva dinâmica via shader (estilo GTA 2) ────────────────
+	# ── Base (parede sul) — deslocada levemente para baixo/direita ────────────
+	var pool_wall = PoolVector2Array()
+	for v in pool:
+		pool_wall.append(v + offset)
+	var face     = Polygon2D.new()
+	face.polygon = pool_wall
+	face.color   = TIER_CORES_FACE[tier]
+	face.z_index = -3
+	add_child(face)
+
+	# ── Telhado colorido por tier ──────────────────────────────────────────────
 	var visual     = Polygon2D.new()
 	visual.polygon = pool
 	visual.z_index = -1
 
 	if not _shader_mats.empty():
-		# Vertex colors: R = altura normalizada (lida pelo shader para calcular offset)
 		var h_norm = clamp(altura_m / 100.0, 0.0, 1.0)
 		var vcols  = PoolColorArray()
 		for _v in pool:
@@ -289,7 +291,6 @@ func _criar_predio_2p5d(predio: Dictionary) -> void:
 		visual.vertex_colors = vcols
 		visual.material      = _shader_mats[tier]
 	else:
-		# Fallback: cor sólida (sem perspectiva, shader não disponível)
 		visual.color = TIER_CORES_ROOF[tier]
 
 	add_child(visual)
