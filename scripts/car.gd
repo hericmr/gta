@@ -208,6 +208,8 @@ func _physics_process(delta: float) -> void:
 				if position.distance_to(ped.position) < RAIO_ATROPELO:
 					ped.atropelar()
 					get_tree().call_group("hud", "registrar_atropelamento")
+					_shake_ampl  = clamp(kmh * 0.12, 5.0, 18.0)
+					_flash_timer = FLASH_DURACAO
 
 	# ── Marcas de pneu ───────────────────────────────────────────────────────
 	var pneu_esq = to_global(PNEU_ESQ_LOCAL)

@@ -13,8 +13,8 @@ const LARGURA_MIN_CARRO  = 5     # ruas com largura < 5 → só pedestres
 
 # Carros
 const N_CARROS   = 20
-const VEL_MIN    = 250.0
-const VEL_MAX    = 530.0
+const VEL_MIN    = 400.0
+const VEL_MAX    = 720.0
 
 # Pedestres
 const N_PEDESTRES  = 120

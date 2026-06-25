@@ -17,7 +17,7 @@ func _ready() -> void:
 
 	# Traço visual (cauda atrás do projétil)
 	var linha = Line2D.new()
-	linha.add_point(Vector2(0, -18))
+	linha.add_point(Vector2(0, -5))
 	linha.add_point(Vector2(0, 0))
 	linha.width         = 5.0
 	linha.default_color = Color(0, 0, 0)

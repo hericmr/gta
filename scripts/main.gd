@@ -14,6 +14,7 @@ onready var _hud      = $HUD
 onready var _world    = $World
 onready var _mapa     = $Mapa
 onready var _traffic  = $NpcTraffic
+onready var _onibus   = $NpcOnibusTraffic
 onready var _touch_ui = $TouchUI/Control
 
 func _ready() -> void:
@@ -28,6 +29,7 @@ func _ready() -> void:
 	_modo_a_pe()
 	_hud.definir_ref(_player)
 	_traffic.definir_ref(_player)
+	_onibus.definir_ref(_player)
 
 func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("roubar"):
@@ -38,6 +40,14 @@ func _process(delta: float) -> void:
 
 	if Input.is_action_just_pressed("mapa_toggle"):
 		_mapa.toggle()
+
+	# DEBUG: F2 teletransporta o player para o ônibus mais próximo
+	if OS.is_debug_build() and Input.is_key_pressed(KEY_F2):
+		var onibus_lista = get_tree().get_nodes_in_group("npc_onibus")
+		if not onibus_lista.empty():
+			var alvo = onibus_lista[0]
+			_player.position = alvo.position + Vector2(150, 0)
+			print("[DEBUG] Teletransportado para ônibus em %s" % alvo.position)
 
 	if _stream == null and _world.has_meta("satelite_stream"):
 		_stream = _world.get_meta("satelite_stream")

@@ -5,8 +5,9 @@ const DIST_WP  = 12.0
 const FPS_ANIM = 8.0
 const N_FRAMES = 5
 
-const TEX_WALK  = preload("res://assets/human/player_walk.png")
-const TEX_MORTO = preload("res://assets/human/SP_1111.png")
+const TEX_WALK   = preload("res://assets/human/player_walk.png")
+const TEX_MORTO  = preload("res://assets/human/SP_1111.png")
+const TEX_SANGUE = preload("res://assets/human/SP_127.png")
 
 # Combinações de roupa [camisa (topo), calça (base)]
 const COMBINACOES = [
@@ -103,7 +104,20 @@ func atropelar() -> void:
 		_sprite.position = Vector2.ZERO
 		_sprite.scale    = Vector2(2.0, 2.0)
 		_sprite.modulate = _cor_topo   # cadáver mantém a cor da camisa
-	z_index = 10
+	z_index = 2
+	_criar_mancha_sangue(position)
+
+
+func _criar_mancha_sangue(pos: Vector2) -> void:
+	if get_parent() == null:
+		return
+	var sangue = Sprite.new()
+	sangue.texture  = TEX_SANGUE
+	sangue.position = pos
+	sangue.rotation = randf() * TAU
+	sangue.scale    = Vector2(4.5, 4.5)
+	sangue.z_index  = 1   # abaixo do cadáver (z=2) e dos veículos (z=5)
+	get_parent().add_child(sangue)
 
 
 func reinicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
@@ -114,7 +128,7 @@ func reinicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 		corpo.rotation = rotation
 		corpo.scale    = Vector2(2.0, 2.0)
 		corpo.modulate = _cor_topo   # corpo estático com a cor do pedestre
-		corpo.z_index  = 10
+		corpo.z_index  = 2
 		get_parent().add_child(corpo)
 	_morto = false
 	collision_layer = 8

@@ -78,6 +78,53 @@ def px_para_latlon(px, m):
     return lat, lon
 
 
+def classificar_tipo(tags: dict) -> str:
+    bt = tags.get("building", "yes").lower()
+    if bt in ("apartments", "residential", "dormitory", "bungalow", "detached",
+              "semidetached_house", "terrace", "house"):
+        return "residencial"
+    if bt in ("commercial", "retail", "supermarket", "hotel", "mall", "office"):
+        return "comercial"
+    if bt in ("industrial", "warehouse", "storage_tank", "manufacture"):
+        return "industrial"
+    if bt in ("school", "university", "college", "kindergarten", "church",
+              "cathedral", "chapel", "hospital", "public", "civic", "government"):
+        return "publico"
+    if bt in ("garage", "garages", "parking", "carport"):
+        return "garagem"
+    return "geral"
+
+
+def montar_aneis_building(segmentos):
+    """Monta anéis de building relations da mesma forma que features."""
+    restantes = [list(s) for s in segmentos if len(s) >= 2]
+    aneis = []
+    while restantes:
+        anel = restantes.pop(0)
+        mudou = True
+        while mudou:
+            mudou = False
+            for i, seg in enumerate(restantes):
+                if anel[-1] == seg[0]:
+                    anel.extend(seg[1:])
+                elif anel[-1] == seg[-1]:
+                    anel.extend(reversed(seg[:-1]))
+                elif anel[0] == seg[-1]:
+                    anel = seg[:-1] + anel
+                elif anel[0] == seg[0]:
+                    anel = list(reversed(seg))[:-1] + anel
+                else:
+                    continue
+                restantes.pop(i)
+                mudou = True
+                break
+        if anel[0] == anel[-1]:
+            anel = anel[:-1]
+        if len(anel) >= 3:
+            aneis.append(anel)
+    return aneis
+
+
 def main():
     m = carregar_meta()
 
@@ -151,16 +198,65 @@ def main():
 
         altura = extrair_altura(tags)
         poly   = [lonlat_para_px(lon, lat, m) for lon, lat in coords]
+        tipo   = classificar_tipo(tags)
 
         predios_osm.append({
             "osm_id":   int(w.get("id")),
             "poly_px":  poly,
             "altura_m": round(altura, 1),
             "area_m2":  round(a, 1),
+            "tipo":     tipo,
         })
 
-    print(f"[OSM] {len(predios_osm)} prédios convertidos  |  "
+    print(f"[OSM] {len(predios_osm)} prédios (ways) convertidos  |  "
           f"ignorados: {ignorados}")
+
+    # ── Relations multipolígono de buildings ──────────────────────────────────
+    rel_adicionados = 0
+    ids_osm_ways = {p["osm_id"] for p in predios_osm}
+    for rel in root.findall("relation"):
+        tags = {t.get("k"): t.get("v") for t in rel.findall("tag")}
+        if "building" not in tags or tags.get("type") != "multipolygon":
+            continue
+
+        segs = []
+        for member in rel.findall("member"):
+            if member.get("type") != "way" or member.get("role") not in ("outer", ""):
+                continue
+            ref = member.get("ref")
+            nd_refs = [nd.get("ref") for nd in root.findall(f"way[@id='{ref}']/nd")]
+            if not nd_refs:
+                continue
+            coords_seg = []
+            for r in nd_refs:
+                if r in nodes:
+                    lat, lon = nodes[r]
+                    coords_seg.append((lon, lat))
+            if len(coords_seg) >= 2:
+                segs.append(coords_seg)
+
+        for anel in montar_aneis_building(segs):
+            lons = [c[0] for c in anel]
+            lats = [c[1] for c in anel]
+            if (min(lons) < m["lon_min"] or max(lons) > m["lon_max"] or
+                    min(lats) < m["lat_min"] or max(lats) > m["lat_max"]):
+                continue
+            a = area_m2(anel)
+            if a < AREA_MIN_M2:
+                continue
+            poly   = [lonlat_para_px(lon, lat, m) for lon, lat in anel]
+            tipo   = classificar_tipo(tags)
+            altura = extrair_altura(tags)
+            predios_osm.append({
+                "osm_id":   int(rel.get("id")),
+                "poly_px":  poly,
+                "altura_m": round(altura, 1),
+                "area_m2":  round(a, 1),
+                "tipo":     tipo,
+            })
+            rel_adicionados += 1
+
+    print(f"[OSM] +{rel_adicionados} prédios de relations multipolígono")
 
     # ── Merge com JSON atual ──────────────────────────────────────────────────
     predios_finais = list(predios_osm)
