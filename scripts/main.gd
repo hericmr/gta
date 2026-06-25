@@ -68,6 +68,16 @@ func _process(delta: float) -> void:
 
 # ── Modos ────────────────────────────────────────────────────────────────────
 
+func _atualizar_touch_ui(no_carro: bool) -> void:
+	if not OS.has_touchscreen_ui_hint():
+		return
+	var ui = $TouchUI/Control
+	ui.get_node("BtnRoubar").visible   = not no_carro
+	ui.get_node("BtnAtirar").visible   = not no_carro
+	ui.get_node("BtnAcelerar").visible = no_carro
+	ui.get_node("BtnFrear").visible    = no_carro
+	ui.get_node("BtnSair").visible     = no_carro
+
 func _modo_a_pe() -> void:
 	var carro  = $Car
 	var player = $Player
@@ -79,6 +89,7 @@ func _modo_a_pe() -> void:
 	carro.get_node("Camera2D").current  = false
 	if _stream:
 		_stream._carro = player
+	_atualizar_touch_ui(false)
 
 func _tentar_entrar_carro() -> void:
 	var player     = $Player
@@ -106,6 +117,7 @@ func _tentar_entrar_carro() -> void:
 		_stream._carro = $Car
 	$HUD.definir_ref($Car)
 	$NpcTraffic.definir_ref($Car)
+	_atualizar_touch_ui(true)
 
 func _sair_do_carro() -> void:
 	var carro  = $Car

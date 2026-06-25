@@ -39,6 +39,14 @@ roubar={
 "deadzone": 0.5,
 "events": [  ]
 }
+acelerar={
+"deadzone": 0.5,
+"events": [  ]
+}
+frear={
+"deadzone": 0.5,
+"events": [  ]
+}
 
 [input_devices]
 

@@ -114,15 +114,23 @@ func _get_input(delta: float) -> void:
 	var throttle:   float = 0.0
 	var steer_dir:  float = 0.0
 
+	# Botões touch dedicados têm prioridade para aceleração/freio
+	if Input.is_action_pressed("acelerar"):
+		throttle =  1.0
+	elif Input.is_action_pressed("frear"):
+		throttle = -1.0
+
 	var joy = _joystick()
 	if joy != null and joy.output.length() > joy.dead_zone:
-		# Joystick analógico: eixo Y invertido (cima = avançar)
-		throttle  = -joy.output.y
-		steer_dir =  joy.output.x
+		steer_dir = joy.output.x
+		# Eixo Y do joystick só controla throttle se os botões não estiverem ativos
+		if throttle == 0.0:
+			throttle = -joy.output.y
 	else:
-		if Input.is_action_pressed("ui_up")    or Input.is_key_pressed(KEY_W): throttle  =  1.0
-		elif Input.is_action_pressed("ui_down") or Input.is_key_pressed(KEY_S): throttle  = -1.0
-		if Input.is_action_pressed("ui_right")  or Input.is_key_pressed(KEY_D): steer_dir =  1.0
+		if throttle == 0.0:
+			if Input.is_action_pressed("ui_up")    or Input.is_key_pressed(KEY_W): throttle  =  1.0
+			elif Input.is_action_pressed("ui_down") or Input.is_key_pressed(KEY_S): throttle  = -1.0
+		if Input.is_action_pressed("ui_right") or Input.is_key_pressed(KEY_D): steer_dir =  1.0
 		elif Input.is_action_pressed("ui_left") or Input.is_key_pressed(KEY_A): steer_dir = -1.0
 
 	# ── Velocidade escalar (move_toward = feel arcade preservado) ────────────
