@@ -1,7 +1,7 @@
 # car.gd — Física arcade do carro top-down (KinematicBody2D — Godot 3)
 extends KinematicBody2D
 
-export var velocidade_maxima: float  = 1374.0
+export var velocidade_maxima: float  = 1074.0
 export var aceleracao: float         = 400.0
 export var atrito: float             = 300.0
 export var frenagem: float           = 900.0
@@ -11,13 +11,13 @@ export var velocidade_re: float      = 0.4
 const ATRITO_LATERAL   = 380.0
 const MAX_VEL_LATERAL  = 280.0
 const LIMIAR_DERRAPA   = 20.0
-const MAX_MARCAS       = 100
+const MAX_MARCAS       = 30
 const PNEU_ESQ_LOCAL   = Vector2(10, 150)
 const PNEU_DIR_LOCAL   = Vector2(62, 150)
 
 # Atropelamento: raio de detecção e limiar de velocidade (km/h)
 const RAIO_ATROPELO    = 45.0
-const VEL_ATROPELO_KMH = 60.0
+const VEL_ATROPELO_KMH = 70.0
 
 # Batida entre carros
 const FLASH_DURACAO    = 0.30
