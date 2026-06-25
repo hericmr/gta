@@ -30,7 +30,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	# Entrar / sair do carro com Enter
-	if Input.is_action_just_pressed("ui_accept"):
+	if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("roubar"):
 		if _no_carro:
 			_sair_do_carro()
 		else:

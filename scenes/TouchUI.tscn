@@ -1,0 +1,59 @@
+[gd_scene load_steps=3 format=2]
+
+[ext_resource path="res://addons/virtual_joystick/virtual_joystick.gd" type="Script" id=1]
+[ext_resource path="res://scripts/touch_button.gd" type="Script" id=2]
+
+[node name="TouchUI" type="CanvasLayer"]
+layer = 3
+
+[node name="Control" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="VirtualJoystick" type="Control" parent="Control"]
+anchor_left = 0.0
+anchor_right = 0.0
+anchor_top = 1.0
+anchor_bottom = 1.0
+margin_left = 10.0
+margin_right = 340.0
+margin_top = -340.0
+margin_bottom = -10.0
+script = ExtResource( 1 )
+joystick_radius = 105.0
+dead_zone = 0.18
+visibility_mode = 1
+joystick_mode = 1
+
+[node name="BtnAtirar" type="Control" parent="Control"]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_top = 1.0
+anchor_bottom = 1.0
+margin_left = -195.0
+margin_right = -75.0
+margin_top = -185.0
+margin_bottom = -65.0
+script = ExtResource( 2 )
+action_name = "atirar"
+label_text = "TIRO"
+radius = 55.0
+color_normal = Color( 0.6, 0.1, 0.1, 0.65 )
+color_pressed = Color( 1.0, 0.2, 0.2, 0.9 )
+
+[node name="BtnRoubar" type="Control" parent="Control"]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_top = 1.0
+anchor_bottom = 1.0
+margin_left = -335.0
+margin_right = -215.0
+margin_top = -275.0
+margin_bottom = -155.0
+script = ExtResource( 2 )
+action_name = "roubar"
+label_text = "ROUBAR"
+radius = 55.0
+color_normal = Color( 0.1, 0.3, 0.6, 0.65 )
+color_pressed = Color( 0.2, 0.5, 1.0, 0.9 )

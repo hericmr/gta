@@ -23,7 +23,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_tiro_cd = max(0.0, _tiro_cd - delta)
-	if Input.is_key_pressed(KEY_CONTROL) and _tiro_cd <= 0.0:
+	if (Input.is_action_pressed("atirar") or Input.is_key_pressed(KEY_CONTROL)) and _tiro_cd <= 0.0:
 		_disparar()
 		_tiro_cd = TIRO_COOLDOWN
 
