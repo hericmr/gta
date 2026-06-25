@@ -21,11 +21,7 @@ import time
 
 import requests
 
-# ── Constantes de mapa ────────────────────────────────────────────────────────
-LAT_MIN = -23.987507;  LAT_MAX = -23.931034
-LON_MIN = -46.340332;  LON_MAX = -46.292267
-LARG_PX = 8960.0;      ALT_PX  = 11520.0
-
+META         = "assets/tiles/meta.json"
 AREA_MIN_M2  = 30     # filtra construções muito pequenas
 ALTURA_PAD   = 8.0    # altura padrão quando não há tag de altura (m)
 METROS_ANDAR = 3.0    # altura estimada por andar (building:levels)
@@ -33,12 +29,27 @@ METROS_ANDAR = 3.0    # altura estimada por andar (building:levels)
 OUTPUT_JSON  = "maps/santos_predios_godot.json"
 CACHE_RAW    = "build/buildings_osm_raw.json"
 
+
+# ── Leitura do meta.json (fonte única de bbox e dimensões) ────────────────────
+
+def carregar_meta() -> dict:
+    with open(META) as f:
+        m = json.load(f)
+    bbox = m["bbox"]  # [lat_min, lon_min, lat_max, lon_max]
+    return {
+        "lat_min": bbox[0], "lon_min": bbox[1],
+        "lat_max": bbox[2], "lon_max": bbox[3],
+        "larg":    float(m["largura_map_px"]),
+        "alt":     float(m["altura_map_px"]),
+    }
+
+
 # ── Conversão de coordenadas ──────────────────────────────────────────────────
 
-def lonlat_para_pre_escala(lon: float, lat: float) -> list:
+def lonlat_para_pre_escala(lon: float, lat: float, m: dict) -> list:
     """Converte lon/lat → coordenadas pré-ESCALA (poly_px no JSON do Godot)."""
-    x = (lon - LON_MIN) / (LON_MAX - LON_MIN) * LARG_PX
-    y = (1.0 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * ALT_PX
+    x = (lon - m["lon_min"]) / (m["lon_max"] - m["lon_min"]) * m["larg"]
+    y = (1.0 - (lat - m["lat_min"]) / (m["lat_max"] - m["lat_min"])) * m["alt"]
     return [round(x, 3), round(y, 3)]
 
 
@@ -78,14 +89,15 @@ def extrair_altura(tags: dict) -> float:
 
 # ── Download Overpass ─────────────────────────────────────────────────────────
 
-def baixar_overpass() -> dict:
+def baixar_overpass(m: dict) -> dict:
+    bbox_q = f"{m['lat_min']},{m['lon_min']},{m['lat_max']},{m['lon_max']}"
     query = (
         f"[out:json][timeout:180];"
-        f"(way[\"building\"]({LAT_MIN},{LON_MIN},{LAT_MAX},{LON_MAX}););"
+        f"(way[\"building\"]({bbox_q}););"
         f"out geom tags;"
     )
     print("[OSM] Baixando prédios do Overpass API...")
-    print(f"      bbox: {LAT_MIN} {LON_MIN} → {LAT_MAX} {LON_MAX}")
+    print(f"      bbox: {m['lat_min']} {m['lon_min']} → {m['lat_max']} {m['lon_max']}")
 
     for tentativa in range(3):
         try:
@@ -115,7 +127,7 @@ def baixar_overpass() -> dict:
 
 # ── Conversão ─────────────────────────────────────────────────────────────────
 
-def converter(dados: dict) -> list:
+def converter(dados: dict, m: dict) -> list:
     predios = []
     ignorados = {"sem_geom": 0, "fora_bbox": 0, "area_pequena": 0}
 
@@ -135,8 +147,8 @@ def converter(dados: dict) -> list:
         # Filtro bbox
         lons = [c[0] for c in coords_ll]
         lats = [c[1] for c in coords_ll]
-        if (min(lons) < LON_MIN or max(lons) > LON_MAX or
-                min(lats) < LAT_MIN or max(lats) > LAT_MAX):
+        if (min(lons) < m["lon_min"] or max(lons) > m["lon_max"] or
+                min(lats) < m["lat_min"] or max(lats) > m["lat_max"]):
             ignorados["fora_bbox"] += 1
             continue
 
@@ -149,7 +161,7 @@ def converter(dados: dict) -> list:
         altura_m = extrair_altura(tags)
         # coords_ll tem o ponto de fechamento repetido (GeoJSON ring); remove-o para Godot
         coords_open = coords_ll[:-1]
-        poly_px  = [lonlat_para_pre_escala(lon, lat) for lon, lat in coords_open]
+        poly_px  = [lonlat_para_pre_escala(lon, lat, m) for lon, lat in coords_open]
 
         predios.append({
             "osm_id":   el["id"],
@@ -174,6 +186,11 @@ def converter(dados: dict) -> list:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    m = carregar_meta()
+    print(f"[META] bbox lat [{m['lat_min']}, {m['lat_max']}]  "
+          f"lon [{m['lon_min']}, {m['lon_max']}]")
+    print(f"       mapa: {int(m['larg'])} x {int(m['alt'])} px")
+
     usar_local = "--local" in sys.argv
 
     if usar_local and os.path.exists(CACHE_RAW):
@@ -181,9 +198,9 @@ def main():
         with open(CACHE_RAW, encoding="utf-8") as f:
             dados = json.load(f)
     else:
-        dados = baixar_overpass()
+        dados = baixar_overpass(m)
 
-    predios = converter(dados)
+    predios = converter(dados, m)
 
     os.makedirs("maps", exist_ok=True)
     saida = {"predios": predios}

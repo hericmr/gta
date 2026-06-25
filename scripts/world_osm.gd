@@ -19,10 +19,16 @@ const TIER_CORES_ROOF = [
 	Color(0.26, 0.25, 0.30, 1.0),   # 30m+   — torre cinza-azul
 ]
 const TIER_CORES_FACE = [
-	Color(0.48, 0.44, 0.38, 1.0),   # base (sombra): mais escuro que o telhado
+	Color(0.48, 0.44, 0.38, 1.0),   # base: mais escuro que o telhado
 	Color(0.34, 0.32, 0.30, 1.0),
 	Color(0.22, 0.20, 0.22, 1.0),
 	Color(0.13, 0.12, 0.16, 1.0),
+]
+const TIER_CORES_WALL = [
+	Color(0.63, 0.56, 0.50, 1.0),   # parede: intermediário entre base e telhado
+	Color(0.47, 0.45, 0.43, 1.0),
+	Color(0.32, 0.30, 0.32, 1.0),
+	Color(0.20, 0.19, 0.23, 1.0),
 ]
 
 var _dados        = null   # santos.json
@@ -31,7 +37,7 @@ var _indice       = 0
 var _indice_2p5d  = 0
 var _corpo_global = null
 var _fase_2p5d    = false  # true quando OSM terminou e inicia 2p5d
-var _shader_mats: Array = []  # 4 ShaderMaterials (um por tier), para perspectiva GTA 2
+var _predios_dinamicos: Array = []  # [{pool, wall_px, centro, roof, quads}]
 
 const URL_BASE        = "https://hericmr.github.io/gta"
 const URL_META        = URL_BASE + "/assets/tiles/meta.json"
@@ -59,17 +65,6 @@ func _ready():
 func _finalizar():
 	if _dados == null:
 		return
-	# Cria 4 ShaderMaterials de perspectiva (um por faixa de altura)
-	var shader = load("res://scripts/parallax_predios.shader")
-	if shader:
-		for i in range(4):
-			var mat = ShaderMaterial.new()
-			mat.shader = shader
-			mat.set_shader_param("vis_color", TIER_CORES_ROOF[i])
-			_shader_mats.append(mat)
-		print("[WorldOSM] Shader de perspectiva carregado — %d materiais." % _shader_mats.size())
-	else:
-		print("[WorldOSM] AVISO: parallax_predios.shader nao encontrado — predios sem perspectiva.")
 	_criar_ruas_visual()
 	_corpo_global = StaticBody2D.new()
 	add_child(_corpo_global)
@@ -217,24 +212,85 @@ func _fundo_fallback():
 	var bg = Polygon2D.new()
 	bg.polygon = PoolVector2Array([
 		Vector2(-1000, -1000), Vector2(10000, -1000),
-		Vector2(10000, 10000), Vector2(-1000, 10000)
+		Vector2(10000, 16000), Vector2(-1000, 16000)
 	])
 	bg.color = Color(0.18, 0.38, 0.65)
 	add_child(bg)
 
+func _z_rua(largura: float) -> int:
+	# Calçada = tier*2 - 30  →  -30..-20
+	# Rua     = tier*2 - 29  →  -29..-19
+	# Prédios: -3, -2, -1  |  Entidades: 0+
+	if largura >= 11: return 5
+	if largura >= 7:  return 4
+	if largura >= 5:  return 3
+	if largura >= 4:  return 2
+	if largura >= 3:  return 1
+	return 0
+
+func _ordenar_por_largura(a, b) -> bool:
+	return float(a["largura"]) < float(b["largura"])
+
 func _criar_ruas_visual():
-	for rua in _dados["ruas"]:
+	# Ordena da menor para a maior largura: avenidas ficam no topo
+	var ruas_ordenadas = _dados["ruas"].duplicate()
+	ruas_ordenadas.sort_custom(self, "_ordenar_por_largura")
+
+	# Calçadas (largura aumentada)
+	for rua in ruas_ordenadas:
+		var largura = float(rua["largura"])
+		var cor_calcada = Color(1.00, 0.86, 0.86)
+		var extra = 10.0
+		var calcada = Line2D.new()
+		var pts = PoolVector2Array()
+		for p in rua["pontos"]: pts.append(Vector2(p[0], p[1]))
+		calcada.points = pts
+		calcada.default_color = cor_calcada
+		calcada.width = _largura_calcada(largura, extra)
+		calcada.joint_mode = Line2D.LINE_JOINT_ROUND
+		calcada.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		calcada.end_cap_mode = Line2D.LINE_CAP_ROUND
+		calcada.z_index = _z_rua(largura) * 2 - 30
+		add_child(calcada)
+
+	# Ruas
+	for rua in ruas_ordenadas:
+		var largura = float(rua["largura"])
 		var linha = Line2D.new()
-		var pts   = PoolVector2Array()
-		for p in rua["pontos"]:
-			pts.append(Vector2(p[0], p[1]))
-		linha.points         = pts
-		linha.default_color  = Color(1, 1, 1, 0.06)
-		linha.width          = float(rua["largura"])
-		linha.joint_mode     = Line2D.LINE_JOINT_ROUND
+		var pts = PoolVector2Array()
+		for p in rua["pontos"]: pts.append(Vector2(p[0], p[1]))
+		linha.points = pts
+		linha.default_color = _cor_rua(largura)
+		linha.width = _mult_rua(largura) * largura
+		linha.joint_mode = Line2D.LINE_JOINT_ROUND
 		linha.begin_cap_mode = Line2D.LINE_CAP_ROUND
-		linha.end_cap_mode   = Line2D.LINE_CAP_ROUND
+		linha.end_cap_mode = Line2D.LINE_CAP_ROUND
+		linha.z_index = _z_rua(largura) * 2 - 29
 		add_child(linha)
+
+func _largura_calcada(largura: float, extra: float) -> float:
+	if largura >= 11: return largura * 1.40 + extra * 2
+	if largura >= 7 and largura <= 10: return largura * 1.55 + extra * 2
+	if largura == 6: return largura * 1.00 + extra * 2
+	return largura + extra * 2
+
+func _cor_rua(largura: float) -> Color:
+	if largura >= 11: return Color(0.91, 0.82, 0.38, 0.90)
+	if largura >= 7 and largura <= 10: return Color(0.00, 0.00, 0.00, 1.00)
+	if largura == 6: return Color(0.00, 0.00, 0.00, 0.55)
+	if largura >= 4 and largura <= 5: return Color(0.00, 0.00, 0.00, 1.00)
+	if largura == 3: return Color(0.27, 0.27, 0.27, 1.00)
+	if largura <= 2: return Color(0.98, 1.00, 0.75, 1.00)
+	return Color(0.3, 0.3, 0.3, 0.3)
+
+func _mult_rua(largura: float) -> float:
+	if largura >= 11: return 1.40
+	if largura >= 7 and largura <= 10: return 1.55
+	if largura == 6: return 1.00
+	if largura >= 4 and largura <= 5: return 1.90
+	if largura == 3: return 0.50
+	if largura <= 2: return 3.00
+	return 1.0
 
 func _criar_colisao_osm(pontos):
 	var pool = PoolVector2Array()
@@ -264,42 +320,75 @@ func _criar_predio_2p5d(predio: Dictionary) -> void:
 	elif altura_m < 30.0: tier = 2
 	else:                 tier = 3
 
-	# Offset proporcional à altura: 0.15 px/m, máx 3 px pré-ESCALA (~45px no mundo)
-	var wall_px = clamp(altura_m * 0.15, 1.0, 3.0)
-	var offset  = Vector2(wall_px * 0.3, wall_px)
+	var wall_px = clamp(altura_m * 0.4, 2.0, 20.0)
+	var n       = pool.size()
 
-	# ── Base — polígono deslocado ─────────────────────────────────────────────
-	var pool_wall = PoolVector2Array()
-	for v in pool:
-		pool_wall.append(v + offset)
+	# ── Base — fixa na posição original (z=-3) ────────────────────────────────
 	var face     = Polygon2D.new()
-	face.polygon = pool_wall
+	face.polygon = pool
 	face.color   = TIER_CORES_FACE[tier]
 	face.z_index = -3
 	add_child(face)
 
-	# ── Telhado colorido por tier ──────────────────────────────────────────────
+	# ── Quads de parede — ligam base ao telhado (z=-2) ───────────────────────
+	var quads = []
+	for i in range(n):
+		var q     = Polygon2D.new()
+		q.color   = TIER_CORES_WALL[tier]
+		q.z_index = -2
+		add_child(q)
+		quads.append(q)
+
+	# ── Telhado — atualizado por frame via atualizar_parallax (z=-1) ─────────
 	var visual     = Polygon2D.new()
 	visual.polygon = pool
+	visual.color   = TIER_CORES_ROOF[tier]
 	visual.z_index = -1
-
-	if not _shader_mats.empty():
-		var h_norm = clamp(altura_m / 100.0, 0.0, 1.0)
-		var vcols  = PoolColorArray()
-		for _v in pool:
-			vcols.append(Color(h_norm, 0.0, 0.0, 1.0))
-		visual.vertex_colors = vcols
-		visual.material      = _shader_mats[tier]
-	else:
-		visual.color = TIER_CORES_ROOF[tier]
-
 	add_child(visual)
 
+	_predios_dinamicos.append({
+		"pool":    pool,
+		"wall_px": wall_px,
+		"centro":  _centroide(pool),
+		"roof":    visual,
+		"quads":   quads,
+	})
 
-# Chamado por main.gd a cada frame — atualiza posição do player no shader
+
+func _centroide(pool: PoolVector2Array) -> Vector2:
+	var c = Vector2.ZERO
+	for v in pool:
+		c += v
+	return c / pool.size()
+
+
+# Chamado por main.gd a cada frame — desloca telhado e paredes baseado no player
 func atualizar_parallax(pos_jogo: Vector2) -> void:
-	if _shader_mats.empty():
+	if _predios_dinamicos.empty():
 		return
 	var pos_pre = pos_jogo / ESCALA
-	for mat in _shader_mats:
-		mat.set_shader_param("player_pos_pre", pos_pre)
+	var raio2   = 250.0 * 250.0  # só atualiza prédios dentro de ~250 unidades pré-ESCALA
+
+	for dados in _predios_dinamicos:
+		var centro: Vector2 = dados.centro
+		if centro.distance_squared_to(pos_pre) > raio2:
+			continue
+
+		var dir     = (centro - pos_pre).normalized()
+		var wall_px: float          = dados.wall_px
+		var offset                  = dir * wall_px
+		var pool:   PoolVector2Array = dados.pool
+		var n                       = pool.size()
+
+		# Atualiza telhado
+		var roof_pts = PoolVector2Array()
+		for v in pool:
+			roof_pts.append(v + offset)
+		dados.roof.polygon = roof_pts
+
+		# Atualiza quads base→telhado
+		var quads: Array = dados.quads
+		for i in range(n):
+			var a = pool[i]
+			var b = pool[(i + 1) % n]
+			quads[i].polygon = PoolVector2Array([a, b, b + offset, a + offset])

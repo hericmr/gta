@@ -6,10 +6,14 @@ const VELOCIDADE_RE = 100.0
 const VEL_ROTACAO   = 230.0
 const FPS_ANIM      = 8.0
 const N_FRAMES      = 5
+const TIRO_COOLDOWN = 0.12
+
+const BulletScript = preload("res://scripts/bullet.gd")
 
 var ativo        = true
 var _frame_timer = 0.0
 var _frame_atual = 0
+var _tiro_cd     = 0.0
 
 onready var _sprite : Sprite   = $Sprite
 onready var _camera : Camera2D = $Camera2D
@@ -17,6 +21,11 @@ onready var _camera : Camera2D = $Camera2D
 func _physics_process(delta: float) -> void:
 	if not ativo:
 		return
+
+	_tiro_cd = max(0.0, _tiro_cd - delta)
+	if Input.is_key_pressed(KEY_CONTROL) and _tiro_cd <= 0.0:
+		_disparar()
+		_tiro_cd = TIRO_COOLDOWN
 
 	# A/D giram no próprio eixo
 	var giro = 0.0
@@ -42,3 +51,10 @@ func _physics_process(delta: float) -> void:
 	else:
 		_frame_timer = 0.0
 		_sprite.frame = 0
+
+
+func _disparar() -> void:
+	var b = BulletScript.new()
+	get_parent().add_child(b)
+	b.position = position
+	b.iniciar(transform.y)

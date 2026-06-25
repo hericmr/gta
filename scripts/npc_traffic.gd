@@ -17,7 +17,7 @@ const VEL_MIN    = 250.0
 const VEL_MAX    = 530.0
 
 # Pedestres
-const N_PEDESTRES  = 30
+const N_PEDESTRES  = 120
 const VEL_PED_MIN  = 150.0
 const VEL_PED_MAX  = 210.0
 
@@ -82,6 +82,29 @@ func _carregar_ruas() -> void:
 		_processar_ruas(d)
 
 
+func _offset_wps(wps: PoolVector2Array, offset: float) -> PoolVector2Array:
+	var result = PoolVector2Array()
+	var n = wps.size()
+	for i in range(n):
+		var perp: Vector2
+		if n == 1:
+			perp = Vector2.RIGHT
+		elif i == 0:
+			perp = (wps[1] - wps[0]).normalized().rotated(PI * 0.5)
+		elif i == n - 1:
+			perp = (wps[i] - wps[i - 1]).normalized().rotated(PI * 0.5)
+		else:
+			var d1 = (wps[i] - wps[i - 1]).normalized()
+			var d2 = (wps[i + 1] - wps[i]).normalized()
+			perp = ((d1 + d2) * 0.5)
+			if perp.length() > 0.01:
+				perp = perp.normalized().rotated(PI * 0.5)
+			else:
+				perp = d1.rotated(PI * 0.5)
+		result.append(wps[i] + perp * offset)
+	return result
+
+
 func _processar_ruas(d: Dictionary) -> void:
 	for rua in d.get("ruas", []):
 		var pts = rua["pontos"]
@@ -90,9 +113,19 @@ func _processar_ruas(d: Dictionary) -> void:
 		var arr = PoolVector2Array()
 		for p in pts:
 			arr.append(Vector2(p[0] * ESCALA, p[1] * ESCALA))
-		var entrada = {"wps": arr, "oneway": rua.get("oneway", false)}
-		if rua.get("largura", 4) >= LARGURA_MIN_CARRO:
+		var largura = rua.get("largura", 4)
+		var oneway  = rua.get("oneway", false)
+		var entrada = {"wps": arr, "oneway": oneway}
+		if largura >= LARGURA_MIN_CARRO:
 			_ruas_carro.append(entrada)
+			# Gera calçadas paralelas em ambos os lados da rua
+			var offset_px = (largura * 0.5 + 2.5) * ESCALA
+			var cal_esq = _offset_wps(arr, offset_px)
+			var cal_dir = _offset_wps(arr, -offset_px)
+			if cal_esq.size() >= MIN_PTS:
+				_ruas_ped.append({"wps": cal_esq, "oneway": false})
+			if cal_dir.size() >= MIN_PTS:
+				_ruas_ped.append({"wps": cal_dir, "oneway": false})
 		else:
 			_ruas_ped.append(entrada)
 	_grafo_carro = _construir_grafo(_ruas_carro)
@@ -138,8 +171,9 @@ func _verificar_pool(pool, ruas, wps_dict, ow_dict, script_path, v_min, v_max, c
 	for npc in pool:
 		if not is_instance_valid(npc):
 			continue
-		if not rect.has_point(npc.position) and \
-		   npc.position.distance_to(_ref.position) > RAIO_DESPAWN:
+		var fora = not rect.has_point(npc.position)
+		var morto = npc.get("_morto")
+		if fora and (morto or npc.position.distance_to(_ref.position) > RAIO_DESPAWN):
 			_resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect)
 
 
@@ -163,7 +197,10 @@ func _resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect) -> void:
 	if info.empty():
 		return
 	var vel = lerp(v_min, v_max, randf())
-	npc.inicializar(info.wps, vel, info.start)
+	if npc.has_method("reinicializar"):
+		npc.reinicializar(info.wps, vel, info.start)
+	else:
+		npc.inicializar(info.wps, vel, info.start)
 	wps_dict[npc] = info.wps
 	ow_dict[npc]  = info.oneway
 
@@ -184,8 +221,7 @@ func _on_fim_npc(npc, ruas, grafo, wps_dict, ow_dict, v_min, v_max) -> void:
 	# ── Tenta seguir a próxima rua conectada ─────────────────────────────────
 	if wps_atual.size() >= 2:
 		var fim   = wps_atual[wps_atual.size() - 1]
-		var chave = _snap_key(fim)
-		var saidas: Array = grafo.get(chave, [])
+		var saidas: Array = _buscar_saidas(grafo, fim)
 		if not saidas.empty():
 			# Remove a rota de onde viemos (evita inversão trivial como única opção)
 			var inicio_atual = wps_atual[0]
@@ -253,6 +289,25 @@ func _inverter(wps: PoolVector2Array) -> PoolVector2Array:
 
 func _snap_key(pos: Vector2) -> String:
 	return str(int(round(pos.x / ESCALA))) + "_" + str(int(round(pos.y / ESCALA)))
+
+
+# Busca saídas no grafo — checa célula exata primeiro, depois vizinhança 3×3
+func _buscar_saidas(grafo: Dictionary, pos: Vector2) -> Array:
+	var cx = int(round(pos.x / ESCALA))
+	var cy = int(round(pos.y / ESCALA))
+	# Centro primeiro (correspondência exata)
+	var k0 = str(cx) + "_" + str(cy)
+	if grafo.has(k0):
+		return grafo[k0]
+	# Vizinhança para tolerar pequenas diferenças de float
+	for dx in [-1, 1, 0]:
+		for dy in [-1, 1, 0]:
+			if dx == 0 and dy == 0:
+				continue
+			var k = str(cx + dx) + "_" + str(cy + dy)
+			if grafo.has(k):
+				return grafo[k]
+	return []
 
 
 func _construir_grafo(ruas: Array) -> Dictionary:

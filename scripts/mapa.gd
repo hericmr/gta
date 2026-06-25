@@ -3,7 +3,7 @@ extends CanvasLayer
 
 const CAMINHO_JSON = "res://maps/santos.json"
 const MAPA_LARG    = 8960.0
-const MAPA_ALT     = 11520.0
+const MAPA_ALT     = 14336.0
 const PADDING      = 40.0
 
 # Cores

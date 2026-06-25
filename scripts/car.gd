@@ -12,12 +12,16 @@ const ATRITO_LATERAL   = 380.0
 const MAX_VEL_LATERAL  = 280.0
 const LIMIAR_DERRAPA   = 20.0
 const MAX_MARCAS       = 100
-const PNEU_ESQ_LOCAL   = Vector2(-7.5, 150)
-const PNEU_DIR_LOCAL   = Vector2(80,  150)
+const PNEU_ESQ_LOCAL   = Vector2(10, 150)
+const PNEU_DIR_LOCAL   = Vector2(62, 150)
 
 # Atropelamento: raio de detecção e limiar de velocidade (km/h)
 const RAIO_ATROPELO    = 45.0
 const VEL_ATROPELO_KMH = 60.0
+
+# Batida entre carros
+const FLASH_DURACAO    = 0.30
+const SHAKE_DECAY      = 80.0
 
 var em_uso: bool        = false setget _set_em_uso
 var _vel: float         = 0.0
@@ -27,6 +31,10 @@ var _posicao_salva: float = 0.0
 var _marcas: Array      = []
 var _pneu_esq_ant       = null   # Vector2 | null
 var _pneu_dir_ant       = null
+
+var _shake_ampl:   float      = 0.0
+var _flash_timer:  float      = 0.0
+var _col_cooldown: Dictionary = {}
 
 onready var _camera: Camera2D          = $Camera2D
 onready var _radio:  AudioStreamPlayer = $Radio
@@ -48,6 +56,8 @@ func parar() -> void:
 
 func _ready() -> void:
 	_radio.connect("finished", self, "_on_radio_finished")
+	collision_mask = 3   # layer 1 (prédios/chão) + layer 2 (carros NPC)
+	add_to_group("player_car")
 
 func _set_em_uso(val: bool) -> void:
 	em_uso = val
@@ -129,6 +139,38 @@ func _physics_process(delta: float) -> void:
 	# ── Movimento (frente + deriva) ──────────────────────────────────────────
 	move_and_slide(-transform.y * _vel + transform.x * _vel_lateral, Vector2.ZERO)
 
+	# ── Cooldowns de colisão ─────────────────────────────────────────────────
+	var _remover = []
+	for key in _col_cooldown.keys():
+		if not is_instance_valid(key):
+			_remover.append(key)
+			continue
+		_col_cooldown[key] -= delta
+		if _col_cooldown[key] <= 0.0:
+			_remover.append(key)
+	for key in _remover:
+		_col_cooldown.erase(key)
+
+	# ── Batida com carros NPC ────────────────────────────────────────────────
+	if abs(_vel) > 80.0:
+		for i in get_slide_count():
+			var col = get_slide_collision(i)
+			if col == null or col.collider == null:
+				continue
+			if not col.collider.is_in_group("npc_carros"):
+				continue
+			if _col_cooldown.has(col.collider):
+				continue
+			var impact = abs(_vel)
+			col.collider.receber_impacto(-col.normal * impact * 0.70)
+			var perda = clamp(impact / velocidade_maxima * 0.55, 0.15, 0.55)
+			_vel          *= (1.0 - perda)
+			_vel_lateral  += col.normal.y * impact * 0.15
+			_shake_ampl    = clamp(impact * 0.014, 5.0, 24.0)
+			_flash_timer   = FLASH_DURACAO
+			_col_cooldown[col.collider] = 0.40
+			break
+
 	# ── Atropelamento ────────────────────────────────────────────────────────
 	var kmh = abs(_vel) * 0.131
 	if kmh > VEL_ATROPELO_KMH:
@@ -149,11 +191,37 @@ func _physics_process(delta: float) -> void:
 	_pneu_esq_ant = pneu_esq
 	_pneu_dir_ant = pneu_dir
 
+	# ── Camera shake ─────────────────────────────────────────────────────────
+	if _shake_ampl > 0.1:
+		_camera.offset = Vector2(
+			(randf() * 2.0 - 1.0) * _shake_ampl,
+			(randf() * 2.0 - 1.0) * _shake_ampl)
+		_shake_ampl = move_toward(_shake_ampl, 0.0, SHAKE_DECAY * delta)
+	else:
+		_camera.offset = Vector2.ZERO
+
+	# ── Flash de impacto ─────────────────────────────────────────────────────
+	if _flash_timer > 0.0:
+		_flash_timer -= delta
+		var t = clamp(_flash_timer / FLASH_DURACAO, 0.0, 1.0)
+		_visual.modulate = Color(1.0 + t * 0.5, 1.0 - t * 0.4, 1.0 - t * 0.4)
+	else:
+		_visual.modulate = Color(1, 1, 1)
+
 	# ── Zoom dinâmico ────────────────────────────────────────────────────────
 	var zoom_alvo: float = lerp(1.4, 2.2, fator)
 	_camera.zoom = lerp(_camera.zoom, Vector2(zoom_alvo, zoom_alvo), 4.0 * delta)
 
 	emit_signal("velocidade_mudou", abs(_vel) * 0.131)
+
+func receber_impacto_externo(impulso: Vector2) -> void:
+	if not em_uso:
+		return
+	var fwd       = -transform.y
+	_vel         += impulso.dot(fwd) * 0.45
+	_vel_lateral += impulso.dot(transform.x) * 0.25
+	_shake_ampl   = clamp(impulso.length() * 0.010, 2.0, 12.0)
+	_flash_timer  = FLASH_DURACAO * 0.5
 
 # ── Marcas de pneu ───────────────────────────────────────────────────────────
 
@@ -163,7 +231,7 @@ func _adicionar_marca(p1: Vector2, p2: Vector2) -> void:
 	var linha = Line2D.new()
 	linha.add_point(p1)
 	linha.add_point(p2)
-	linha.width         = 4.0
+	linha.width         = 7.0
 	linha.default_color = Color(0.07, 0.07, 0.07, 0.80)
 	linha.z_index       = -5
 	get_parent().add_child(linha)

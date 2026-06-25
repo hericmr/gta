@@ -22,7 +22,7 @@ META     = "assets/tiles/meta.json"
 TX_MIN = 97328
 TX_MAX = 97362   # 35 tiles leste-oeste
 TY_MIN = 149028
-TY_MAX = 149072  # 45 tiles norte-sul
+TY_MAX = 149085  # 58 tiles norte-sul (estendido 2 tiles a mais para o sul)
 
 ESPERA  = 0.15   # segundos entre requisições (respeita rate limit ESRI)
 

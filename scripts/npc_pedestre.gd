@@ -63,10 +63,18 @@ func atropelar() -> void:
 		_sprite.position = Vector2.ZERO
 		_sprite.scale    = Vector2(2.0, 2.0)
 		_sprite.modulate = Color(1, 1, 1, 1)
-	z_index = -1
+	z_index = 10
 
 
 func reinicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
+	if _morto and get_parent():
+		var corpo = Sprite.new()
+		corpo.texture  = load("res://assets/human/SP_1111.png")
+		corpo.position = position
+		corpo.rotation = rotation
+		corpo.scale    = Vector2(2.0, 2.0)
+		corpo.z_index  = 10
+		get_parent().add_child(corpo)
 	_morto = false
 	collision_layer = 8
 	collision_mask  = 1
