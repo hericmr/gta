@@ -38,7 +38,9 @@ var _pedestres: Array      = []
 var _ped_wps:   Dictionary = {}
 var _ped_ow:    Dictionary = {}
 
-var _ref = null
+var _ref             = null
+var _process_timer:  float = 0.0
+const PROCESS_INTERVAL = 0.5
 
 
 func _ready() -> void:
@@ -148,9 +150,13 @@ func _rect_visivel() -> Rect2:
 				 (br - tl) + Vector2(MARGEM * 2.0, MARGEM * 2.0))
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _ref == null:
 		return
+	_process_timer += delta
+	if _process_timer < PROCESS_INTERVAL:
+		return
+	_process_timer = 0.0
 	var rect = _rect_visivel()
 	_verificar_pool(_carros, _ruas_carro, _car_wps, _car_ow,
 			"res://scripts/npc_car.gd", VEL_MIN, VEL_MAX, "_on_fim_carro", rect)

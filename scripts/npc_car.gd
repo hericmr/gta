@@ -1,7 +1,8 @@
 # npc_car.gd — Carro NPC com mesmo asset e tamanho do carro do jogador (Godot 3)
 extends KinematicBody2D
 
-const DIST_WP = 50.0
+const DIST_WP   = 50.0
+const TEX_CARRO = preload("res://assets/carros/SP_021.png")
 
 const CORES = [
 	Color(0.80, 0.20, 0.20),  # vermelho
@@ -40,7 +41,7 @@ signal chegou_ao_fim
 func _ready() -> void:
 	# Visual idêntico ao Car.tscn: mesma posição, rotação, escala e textura
 	var v = Polygon2D.new()
-	v.texture  = load("res://assets/carros/SP_021.png")
+	v.texture  = TEX_CARRO
 	v.polygon  = POLIGONO
 	v.position = Vector2(87.715, 167.5)
 	v.rotation = PI

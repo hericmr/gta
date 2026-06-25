@@ -1,43 +1,48 @@
 # npc_pedestre.gd — Pedestre NPC com mesmo asset e tamanho do player (Godot 3)
 extends KinematicBody2D
 
-const DIST_WP   = 12.0
-const FPS_ANIM  = 8.0
-const N_FRAMES  = 5
+const DIST_WP  = 12.0
+const FPS_ANIM = 8.0
+const N_FRAMES = 5
 
-const CORES = [
-	Color(1.00, 1.00, 1.00),
-	Color(0.70, 0.85, 1.00),
-	Color(1.00, 0.75, 0.75),
-	Color(0.75, 1.00, 0.75),
-	Color(1.00, 0.92, 0.65),
-	Color(0.85, 0.75, 1.00),
-	Color(0.65, 0.65, 0.65),
-	Color(0.60, 0.40, 0.25),
+const TEX_WALK  = preload("res://assets/human/player_walk.png")
+const TEX_MORTO = preload("res://assets/human/SP_1111.png")
+
+# Combinações de roupa [camisa (topo), calça (base)]
+const COMBINACOES = [
+	[Color(0.95, 0.25, 0.25), Color(0.20, 0.20, 0.65)],  # vermelho + azul
+	[Color(0.25, 0.50, 0.95), Color(0.12, 0.12, 0.12)],  # azul + preto
+	[Color(0.20, 0.72, 0.25), Color(0.72, 0.55, 0.30)],  # verde + bege
+	[Color(1.00, 0.88, 0.10), Color(0.22, 0.42, 0.18)],  # amarelo + verde escuro
+	[Color(1.00, 0.55, 0.10), Color(0.30, 0.18, 0.08)],  # laranja + marrom
+	[Color(0.78, 0.20, 0.78), Color(0.12, 0.12, 0.12)],  # roxo + preto
+	[Color(0.90, 0.90, 0.90), Color(0.35, 0.25, 0.18)],  # branco + marrom
+	[Color(0.50, 0.82, 0.92), Color(0.62, 0.62, 0.62)],  # azul claro + cinza
+	[Color(0.55, 0.35, 0.20), Color(0.88, 0.83, 0.72)],  # marrom + bege
+	[Color(0.15, 0.62, 0.55), Color(0.82, 0.28, 0.28)],  # teal + vermelho
 ]
 
 var _wps:         PoolVector2Array = PoolVector2Array()
-var _idx:         int   = 0
-var _vel:         float = 10.0
-var _terminado:   bool  = false
-var _frame_timer: float = 0.0
-var _frame_atual: int   = 0
+var _idx:         int    = 0
+var _vel:         float  = 10.0
+var _terminado:   bool   = false
+var _frame_timer: float  = 0.0
+var _frame_atual: int    = 0
 var _sprite:      Sprite = null
-var _morto:       bool  = false
+var _sprite_topo: Sprite = null
+var _morto:       bool   = false
+var _cor_topo:    Color  = Color.white
+var _cor_base:    Color  = Color.white
+var _half_h:      float  = 0.0
 
 signal chegou_ao_fim
 
 
 func _ready() -> void:
 	add_to_group("pedestres")
-
-	_sprite          = Sprite.new()
-	_sprite.texture  = load("res://assets/human/player_walk.png")
-	_sprite.hframes  = N_FRAMES
-	_sprite.position = Vector2(0.0, -2.0)
-	_sprite.scale    = Vector2(2.08, 1.85)
-	_sprite.modulate = CORES[randi() % CORES.size()]
-	add_child(_sprite)
+	_half_h = TEX_WALK.get_size().y / 2.0
+	_criar_sprites()
+	_aplicar_combinacao()
 
 	var shape = CircleShape2D.new()
 	shape.radius = 7.9
@@ -49,6 +54,38 @@ func _ready() -> void:
 	collision_mask  = 1
 
 
+func _criar_sprites() -> void:
+	var tex_w = TEX_WALK.get_size().x
+
+	# Parte inferior (calça) — metade de baixo da textura
+	_sprite = Sprite.new()
+	_sprite.texture        = TEX_WALK
+	_sprite.hframes        = N_FRAMES
+	_sprite.region_enabled = true
+	_sprite.region_rect    = Rect2(0, _half_h, tex_w, _half_h)
+	_sprite.scale          = Vector2(2.08, 1.85)
+	_sprite.position       = Vector2(0.0, -2.0 + _half_h * 0.5 * 1.85)
+	add_child(_sprite)
+
+	# Parte superior (camisa) — metade de cima da textura
+	_sprite_topo = Sprite.new()
+	_sprite_topo.texture        = TEX_WALK
+	_sprite_topo.hframes        = N_FRAMES
+	_sprite_topo.region_enabled = true
+	_sprite_topo.region_rect    = Rect2(0, 0, tex_w, _half_h)
+	_sprite_topo.scale          = Vector2(2.08, 1.85)
+	_sprite_topo.position       = Vector2(0.0, -2.0 - _half_h * 0.5 * 1.85)
+	add_child(_sprite_topo)
+
+
+func _aplicar_combinacao() -> void:
+	var combo       = COMBINACOES[randi() % COMBINACOES.size()]
+	_cor_topo       = combo[0]
+	_cor_base       = combo[1]
+	_sprite.modulate      = _cor_base
+	_sprite_topo.modulate = _cor_topo
+
+
 func atropelar() -> void:
 	if _morto:
 		return
@@ -56,23 +93,27 @@ func atropelar() -> void:
 	_terminado = true
 	collision_layer = 0
 	collision_mask  = 0
+	if _sprite_topo:
+		_sprite_topo.visible = false
 	if _sprite:
-		_sprite.texture  = load("res://assets/human/SP_1111.png")
+		_sprite.region_enabled = false
+		_sprite.texture  = TEX_MORTO
 		_sprite.hframes  = 1
 		_sprite.frame    = 0
 		_sprite.position = Vector2.ZERO
 		_sprite.scale    = Vector2(2.0, 2.0)
-		_sprite.modulate = Color(1, 1, 1, 1)
+		_sprite.modulate = _cor_topo   # cadáver mantém a cor da camisa
 	z_index = 10
 
 
 func reinicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 	if _morto and get_parent():
 		var corpo = Sprite.new()
-		corpo.texture  = load("res://assets/human/SP_1111.png")
+		corpo.texture  = TEX_MORTO
 		corpo.position = position
 		corpo.rotation = rotation
 		corpo.scale    = Vector2(2.0, 2.0)
+		corpo.modulate = _cor_topo   # corpo estático com a cor do pedestre
 		corpo.z_index  = 10
 		get_parent().add_child(corpo)
 	_morto = false
@@ -80,19 +121,23 @@ func reinicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 	collision_mask  = 1
 	z_index = 0
 	if _sprite:
-		_sprite.texture  = load("res://assets/human/player_walk.png")
-		_sprite.hframes  = N_FRAMES
-		_sprite.position = Vector2(0.0, -2.0)
-		_sprite.scale    = Vector2(2.08, 1.85)
-		_sprite.modulate = CORES[randi() % CORES.size()]
+		_sprite.region_enabled = true
+		_sprite.texture        = TEX_WALK
+		_sprite.hframes        = N_FRAMES
+		_sprite.position       = Vector2(0.0, -2.0 + _half_h * 0.5 * 1.85)
+		_sprite.scale          = Vector2(2.08, 1.85)
+		_sprite.visible        = true
+	if _sprite_topo:
+		_sprite_topo.visible = true
+	_aplicar_combinacao()
 	inicializar(wps, vel, start)
 
 
 func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
-	_wps       = wps
-	_vel       = vel
-	_terminado = false
-	_frame_atual  = randi() % N_FRAMES   # começa em frame aleatório
+	_wps          = wps
+	_vel          = vel
+	_terminado    = false
+	_frame_atual  = randi() % N_FRAMES
 	_frame_timer  = 0.0
 	_idx = clamp(start, 0, max(0, wps.size() - 1))
 	if _idx < _wps.size():
@@ -109,6 +154,8 @@ func _physics_process(delta: float) -> void:
 			emit_signal("chegou_ao_fim")
 		if _sprite:
 			_sprite.frame = 0
+		if _sprite_topo:
+			_sprite_topo.frame = 0
 		return
 
 	var diff = _wps[_idx] - position
@@ -121,10 +168,11 @@ func _physics_process(delta: float) -> void:
 	rotation = atan2(diff.y, diff.x) - PI * 0.5
 	move_and_slide((diff / dist) * _vel)
 
-	# Animação de caminhada
 	_frame_timer += delta
 	if _frame_timer >= 1.0 / FPS_ANIM:
 		_frame_timer -= 1.0 / FPS_ANIM
 		_frame_atual  = (_frame_atual + 1) % N_FRAMES
 		if _sprite:
 			_sprite.frame = _frame_atual
+		if _sprite_topo:
+			_sprite_topo.frame = _frame_atual

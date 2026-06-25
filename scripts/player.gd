@@ -14,6 +14,7 @@ var ativo        = true
 var _frame_timer = 0.0
 var _frame_atual = 0
 var _tiro_cd     = 0.0
+var _joy         = null
 
 onready var _sprite : Sprite   = $Sprite
 onready var _camera : Camera2D = $Camera2D
@@ -65,8 +66,10 @@ func _animar(delta: float) -> void:
 
 
 func _joystick():
-	var nos = get_tree().get_nodes_in_group("virtual_joystick")
-	return nos[0] if not nos.empty() else null
+	if _joy == null or not is_instance_valid(_joy):
+		var nos = get_tree().get_nodes_in_group("virtual_joystick")
+		_joy = nos[0] if not nos.empty() else null
+	return _joy
 
 
 func _disparar() -> void:

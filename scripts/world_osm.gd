@@ -4,6 +4,7 @@ extends Node2D
 const CAMINHO_JSON       = "res://maps/santos.json"
 const CAMINHO_META       = "res://assets/tiles/meta.json"
 const CAMINHO_2P5D       = "res://maps/santos_predios_godot.json"
+const CAMINHO_FEATURES   = "res://maps/santos_features.json"
 
 # 15 px ≈ 1 metro → carro (28 px) ≈ 1.9 m de largura
 const ESCALA = 15.0
@@ -39,14 +40,18 @@ var _corpo_global = null
 var _fase_2p5d    = false  # true quando OSM terminou e inicia 2p5d
 var _predios_dinamicos: Array = []  # [{pool, wall_px, centro, roof, quads}]
 
-const URL_BASE        = "https://hericmr.github.io/gta"
-const URL_META        = URL_BASE + "/assets/tiles/meta.json"
-const URL_JSON        = URL_BASE + "/maps/santos.json"
-const URL_2P5D        = URL_BASE + "/maps/santos_predios_godot.json"
+const URL_BASE         = "https://hericmr.github.io/gta"
+const URL_META         = URL_BASE + "/assets/tiles/meta.json"
+const URL_JSON         = URL_BASE + "/maps/santos.json"
+const URL_2P5D         = URL_BASE + "/maps/santos_predios_godot.json"
+const URL_FEATURES     = URL_BASE + "/maps/santos_features.json"
 
-var _html5_json_ok    = false
-var _html5_meta_ok    = false
-var _html5_2p5d_ok    = false
+var _html5_json_ok     = false
+var _html5_meta_ok     = false
+var _html5_2p5d_ok     = false
+var _html5_features_ok = false
+
+var _dados_features    = null
 
 
 func _ready():
@@ -55,16 +60,20 @@ func _ready():
 		_fetch_json()
 		_fetch_meta()
 		_fetch_2p5d()
+		_fetch_features()
 	else:
 		_carregar_satelite()
 		_carregar_json()
 		_carregar_2p5d()
+		_carregar_features()
 		_finalizar()
 
 
 func _finalizar():
 	if _dados == null:
 		return
+	if _dados_features != null:
+		_criar_features(_dados_features)
 	_criar_ruas_visual()
 	_corpo_global = StaticBody2D.new()
 	add_child(_corpo_global)
@@ -162,8 +171,30 @@ func _on_2p5d_carregado(result, code, _headers, body):
 	_html5_2p5d_ok = true
 	_verificar_html5_pronto()
 
+func _fetch_features():
+	var req = HTTPRequest.new()
+	add_child(req)
+	req.connect("request_completed", self, "_on_features_carregado")
+	if req.request(URL_FEATURES) != OK:
+		_html5_features_ok = true
+		_verificar_html5_pronto()
+
+func _on_features_carregado(result, code, _headers, body):
+	if result == OK and code == 200:
+		_dados_features = parse_json(body.get_string_from_utf8())
+		if _dados_features:
+			print("[WorldOSM] santos_features.json OK — canais:%d verde:%d agua:%d porto:%d" % [
+				len(_dados_features.get("canais", [])),
+				len(_dados_features.get("verde",  [])),
+				len(_dados_features.get("agua",   [])),
+				len(_dados_features.get("porto",  []))])
+	else:
+		print("[WorldOSM] santos_features.json não carregado — sem features OSM")
+	_html5_features_ok = true
+	_verificar_html5_pronto()
+
 func _verificar_html5_pronto():
-	if _html5_json_ok and _html5_meta_ok and _html5_2p5d_ok:
+	if _html5_json_ok and _html5_meta_ok and _html5_2p5d_ok and _html5_features_ok:
 		_finalizar()
 
 
@@ -204,6 +235,19 @@ func _carregar_2p5d():
 	arq.close()
 	if _dados_2p5d:
 		print("[WorldOSM] santos_predios_godot.json carregado — %d prédios." % len(_dados_2p5d["predios"]))
+
+func _carregar_features():
+	var arq = File.new()
+	if not arq.file_exists(CAMINHO_FEATURES):
+		print("[WorldOSM] santos_features.json não encontrado — sem features OSM.")
+		return
+	arq.open(CAMINHO_FEATURES, File.READ)
+	_dados_features = parse_json(arq.get_as_text())
+	arq.close()
+	if _dados_features:
+		print("[WorldOSM] santos_features.json carregado — canais:%d verde:%d." % [
+			len(_dados_features.get("canais", [])),
+			len(_dados_features.get("verde",  []))])
 
 
 # ── Criação de nós ────────────────────────────────────────────────────────────
@@ -353,6 +397,73 @@ func _criar_predio_2p5d(predio: Dictionary) -> void:
 		"roof":    visual,
 		"quads":   quads,
 	})
+
+
+# ── Features OSM: canais, parques, água, porto ───────────────────────────────
+# z-indexes: satellite=-10, features=-9→-4, streets=-30→-20, buildings=-3→-1
+# Features ficam acima do satélite e abaixo dos prédios 2.5D.
+
+func _criar_features(dados: Dictionary) -> void:
+	# Porto/industrial (z=-9, logo acima do satélite)
+	for f in dados.get("porto", []):
+		var poly = Polygon2D.new()
+		var pts  = PoolVector2Array()
+		for p in f["poly_px"]:
+			pts.append(Vector2(p[0], p[1]))
+		if pts.size() < 3:
+			continue
+		poly.polygon = pts
+		poly.color   = Color(0.38, 0.32, 0.28, 0.75)
+		poly.z_index = -9
+		add_child(poly)
+
+	# Parques e jardins (z=-8)
+	for f in dados.get("verde", []):
+		var poly = Polygon2D.new()
+		var pts  = PoolVector2Array()
+		for p in f["poly_px"]:
+			pts.append(Vector2(p[0], p[1]))
+		if pts.size() < 3:
+			continue
+		poly.polygon = pts
+		poly.color   = Color(0.30, 0.58, 0.25, 0.80)
+		poly.z_index = -8
+		add_child(poly)
+
+	# Corpos d'água — polígonos (z=-7)
+	for f in dados.get("agua", []):
+		var poly = Polygon2D.new()
+		var pts  = PoolVector2Array()
+		for p in f["poly_px"]:
+			pts.append(Vector2(p[0], p[1]))
+		if pts.size() < 3:
+			continue
+		poly.polygon = pts
+		poly.color   = Color(0.18, 0.45, 0.72, 0.85)
+		poly.z_index = -7
+		add_child(poly)
+
+	# Canais — linhas largas (z=-6, bem visíveis acima de tudo exceto prédios)
+	for c in dados.get("canais", []):
+		var pts = c["pontos"]
+		if pts.size() < 2:
+			continue
+		var linha = Line2D.new()
+		for p in pts:
+			linha.add_point(Vector2(p[0], p[1]))
+		linha.default_color  = Color(0.18, 0.50, 0.78, 0.90)
+		linha.width          = c.get("largura", 15.0)
+		linha.joint_mode     = Line2D.LINE_JOINT_ROUND
+		linha.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		linha.end_cap_mode   = Line2D.LINE_CAP_ROUND
+		linha.z_index        = -6
+		add_child(linha)
+
+	print("[WorldOSM] Features criadas: porto=%d verde=%d agua=%d canais=%d" % [
+		len(dados.get("porto",  [])),
+		len(dados.get("verde",  [])),
+		len(dados.get("agua",   [])),
+		len(dados.get("canais", []))])
 
 
 func _centroide(pool: PoolVector2Array) -> Vector2:
