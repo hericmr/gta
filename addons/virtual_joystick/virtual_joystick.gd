@@ -29,6 +29,7 @@ var _prev:        Dictionary = {}
 
 
 func _ready() -> void:
+	add_to_group("virtual_joystick")
 	if visibility_mode == VisibilityMode.TOUCHSCREEN_ONLY and not OS.has_touchscreen_ui_hint():
 		visible = false
 		return

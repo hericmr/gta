@@ -27,30 +27,46 @@ func _physics_process(delta: float) -> void:
 		_disparar()
 		_tiro_cd = TIRO_COOLDOWN
 
-	# A/D giram no próprio eixo
+	# ── Mobile: joystick analógico ────────────────────────────────────────────
+	var joy = _joystick()
+	if joy != null and joy.output.length() > joy.dead_zone:
+		var dir = joy.output
+		# ângulo no padrão do Godot: atan2(y,x) - 90° para que "cima" = rotation 0
+		rotation = lerp_angle(rotation, atan2(dir.y, dir.x) - PI * 0.5, 15.0 * delta)
+		move_and_slide(dir.normalized() * VELOCIDADE)
+		_animar(delta)
+		return
+
+	# ── Teclado: controles de tanque ─────────────────────────────────────────
 	var giro = 0.0
 	if Input.is_action_pressed("ui_right") or Input.is_key_pressed(KEY_D): giro =  1.0
 	elif Input.is_action_pressed("ui_left")  or Input.is_key_pressed(KEY_A): giro = -1.0
 	rotation_degrees += giro * VEL_ROTACAO * delta
 
-	# W/S avançam/recuam na direção que o sprite está olhando
 	var av = 0.0
 	if Input.is_action_pressed("ui_up")   or Input.is_key_pressed(KEY_W): av =  1.0
 	elif Input.is_action_pressed("ui_down") or Input.is_key_pressed(KEY_S): av = -1.0
 
-	var vel = transform.y * av * (VELOCIDADE if av > 0 else VELOCIDADE_RE)
-	move_and_slide(vel)
+	move_and_slide(transform.y * av * (VELOCIDADE if av > 0 else VELOCIDADE_RE))
 
-	# Animação
 	if av != 0.0:
-		_frame_timer += delta
-		if _frame_timer >= 1.0 / FPS_ANIM:
-			_frame_timer -= 1.0 / FPS_ANIM
-			_frame_atual = (_frame_atual + 1) % N_FRAMES
-			_sprite.frame = _frame_atual
+		_animar(delta)
 	else:
 		_frame_timer = 0.0
 		_sprite.frame = 0
+
+
+func _animar(delta: float) -> void:
+	_frame_timer += delta
+	if _frame_timer >= 1.0 / FPS_ANIM:
+		_frame_timer -= 1.0 / FPS_ANIM
+		_frame_atual  = (_frame_atual + 1) % N_FRAMES
+		_sprite.frame = _frame_atual
+
+
+func _joystick():
+	var nos = get_tree().get_nodes_in_group("virtual_joystick")
+	return nos[0] if not nos.empty() else null
 
 
 func _disparar() -> void:
