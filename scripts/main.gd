@@ -72,11 +72,14 @@ func _atualizar_touch_ui(no_carro: bool) -> void:
 	if not OS.has_touchscreen_ui_hint():
 		return
 	var ui = $TouchUI/Control
-	ui.get_node("BtnRoubar").visible   = not no_carro
-	ui.get_node("BtnAtirar").visible   = not no_carro
-	ui.get_node("BtnAcelerar").visible = no_carro
-	ui.get_node("BtnFrear").visible    = no_carro
-	ui.get_node("BtnSair").visible     = no_carro
+	ui.get_node("BtnRoubar").visible      = not no_carro
+	ui.get_node("BtnAtirar").visible      = not no_carro
+	ui.get_node("BtnAcelerar").visible    = no_carro
+	ui.get_node("BtnFrear").visible       = no_carro
+	ui.get_node("BtnSair").visible        = no_carro
+	ui.get_node("BtnVirarEsq").visible    = no_carro
+	ui.get_node("BtnVirarDir").visible    = no_carro
+	ui.get_node("VirtualJoystick").visible = not no_carro
 
 func _modo_a_pe() -> void:
 	var carro  = $Car

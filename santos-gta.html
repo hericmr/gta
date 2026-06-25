@@ -111,52 +111,12 @@
 			padding: 4px 6px;
 			visibility: visible;
 		}
-
-		#rotate-overlay {
-			display: none;
-			position: fixed;
-			inset: 0;
-			z-index: 9999;
-			background: #000;
-			flex-direction: column;
-			justify-content: center;
-			align-items: center;
-			color: #fff;
-			font-family: 'Noto Sans', Arial, sans-serif;
-			font-size: 1.2rem;
-			text-align: center;
-			gap: 24px;
-		}
-
-		#rotate-overlay svg {
-			width: 72px;
-			height: 72px;
-			animation: giro 1.8s ease-in-out infinite;
-		}
-
-		@keyframes giro {
-			0%   { transform: rotate(0deg); }
-			40%  { transform: rotate(90deg); }
-			60%  { transform: rotate(90deg); }
-			100% { transform: rotate(0deg); }
-		}
-
-		@media only screen and (orientation: portrait) {
-			#rotate-overlay { display: flex; }
-		}
 	</style>
 <link id='-gd-engine-icon' rel='icon' type='image/png' href='santos-gta.icon.png' />
 <link rel='apple-touch-icon' href='santos-gta.apple-touch-icon.png'/>
 
 </head>
 <body>
-	<div id='rotate-overlay'>
-		<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>
-			<rect x='4' y='2' width='16' height='20' rx='2'/>
-			<line x1='4' y1='17' x2='20' y2='17'/>
-		</svg>
-		<span>Gire o dispositivo<br/>para jogar</span>
-	</div>
 	<canvas id='canvas'>
 		HTML5 canvas appears to be unsupported in the current browser.<br />
 		Please try updating or use a different browser.
@@ -177,44 +137,9 @@
 	</div>
 
 	<script type='text/javascript' src='santos-gta.js'></script>
-	<script type='text/javascript'>
-		(function() {
-			var isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-				|| ('ontouchstart' in window);
-			if (!isMobile) return;
-
-			function requestFullscreen() {
-				var el = document.documentElement;
-				var fn = el.requestFullscreen || el.webkitRequestFullscreen
-					|| el.mozRequestFullScreen || el.msRequestFullscreen;
-				if (fn) fn.call(el).catch(function(){});
-			}
-
-			function lockLandscape() {
-				var so = screen.orientation || screen.mozOrientation || screen.msOrientation;
-				if (so && so.lock) {
-					so.lock('landscape').catch(function(){});
-				}
-			}
-
-			function onFirstInteraction() {
-				requestFullscreen();
-				lockLandscape();
-			}
-			document.addEventListener('touchstart', onFirstInteraction, { once: true });
-			document.addEventListener('click',      onFirstInteraction, { once: true });
-
-			// Se sair do fullscreen, repede na próxima interação
-			document.addEventListener('fullscreenchange', function() {
-				if (!document.fullscreenElement) {
-					document.addEventListener('touchstart', onFirstInteraction, { once: true });
-				}
-			});
-		})();
-	</script>
 	<script type='text/javascript'>//<![CDATA[
 
-		const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"executable":"santos-gta","experimentalVK":false,"fileSizes":{"santos-gta.pck":38521696,"santos-gta.wasm":25658069},"focusCanvas":true,"gdnativeLibs":[]};
+		const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"executable":"santos-gta","experimentalVK":false,"fileSizes":{"santos-gta.pck":38522416,"santos-gta.wasm":25658069},"focusCanvas":true,"gdnativeLibs":[]};
 		var engine = new Engine(GODOT_CONFIG);
 
 		(function() {

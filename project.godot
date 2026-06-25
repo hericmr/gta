@@ -47,6 +47,14 @@ frear={
 "deadzone": 0.5,
 "events": [  ]
 }
+virar_esquerda={
+"deadzone": 0.5,
+"events": [  ]
+}
+virar_direita={
+"deadzone": 0.5,
+"events": [  ]
+}
 
 [input_devices]
 
