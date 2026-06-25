@@ -1,40 +1,45 @@
-# car.gd — Física arcade do carro top-down (KinematicBody2D — Godot 3)
+# car.gd — Física arcade top-down (modelo bicicleta — Godot 3)
+# Ref: kidscancode.org/godot_recipes/3.x/2d/car_steering/
 extends KinematicBody2D
 
-export var velocidade_maxima: float  = 1074.0
-export var aceleracao: float         = 400.0
-export var atrito: float             = 300.0
-export var frenagem: float           = 900.0
-export var velocidade_re: float      = 0.4
+# ── Modelo bicicleta ────────────────────────────────────────────────────────
+export var wheel_base:     float = 150.0   # distância entre eixos (px)
+export var steering_angle: float = 22.0    # ângulo máximo de esterçamento (°)
+export var engine_power:   float = 600.0   # aceleração (px/s²)
+export var braking_power:  float = 900.0   # frenagem (px/s²)
+export var friction_dec:   float = 300.0   # desaceleração por atrito (px/s²)
+export var max_speed:      float = 1074.0
+export var max_speed_re:   float = 260.0   # máximo em ré
 
-# Derrapagem
-const ATRITO_LATERAL   = 380.0
-const MAX_VEL_LATERAL  = 280.0
-const LIMIAR_DERRAPA   = 20.0
-const MAX_MARCAS       = 30
-const PNEU_ESQ_LOCAL   = Vector2(10, 150)
-const PNEU_DIR_LOCAL   = Vector2(62, 150)
-
-# Atropelamento: raio de detecção e limiar de velocidade (km/h)
+# Atropelamento
 const RAIO_ATROPELO    = 45.0
 const VEL_ATROPELO_KMH = 70.0
 
-# Batida entre carros
-const FLASH_DURACAO    = 0.30
-const SHAKE_DECAY      = 80.0
+# Batida / câmera
+const FLASH_DURACAO = 0.30
+const SHAKE_DECAY   = 80.0
 
-var em_uso: bool        = false setget _set_em_uso
-var _vel: float         = 0.0
-var _vel_lateral: float = 0.0
-var _loader             = null
+# Marcas de pneu
+const MAX_MARCAS     = 30
+const LIMIAR_DERRAPA = 0.28          # |sin(ângulo heading×vel)| ≈ 16°
+const PNEU_ESQ_LOCAL = Vector2(10,  150)
+const PNEU_DIR_LOCAL = Vector2(62,  150)
+
+var em_uso: bool = false setget _set_em_uso
+
+# Estado físico
+var _velocity:    Vector2 = Vector2.ZERO
+var _speed:       float   = 0.0   # escalar com sinal (+ frente, − ré)
+var _steer_angle: float   = 0.0
+
+var _loader         = null
 var _posicao_salva: float = 0.0
-var _marcas: Array      = []
-var _pneu_esq_ant       = null   # Vector2 | null
-var _pneu_dir_ant       = null
-
-var _shake_ampl:   float      = 0.0
-var _flash_timer:  float      = 0.0
-var _col_cooldown: Dictionary = {}
+var _marcas:        Array = []
+var _pneu_esq_ant         = null
+var _pneu_dir_ant         = null
+var _shake_ampl:    float = 0.0
+var _flash_timer:   float = 0.0
+var _col_cooldown:  Dictionary = {}
 
 onready var _camera: Camera2D          = $Camera2D
 onready var _radio:  AudioStreamPlayer = $Radio
@@ -51,12 +56,12 @@ signal velocidade_mudou(kmh)
 
 
 func parar() -> void:
-	_vel         = 0.0
-	_vel_lateral = 0.0
+	_speed    = 0.0
+	_velocity = Vector2.ZERO
 
 func _ready() -> void:
 	_radio.connect("finished", self, "_on_radio_finished")
-	collision_mask = 3   # layer 1 (prédios/chão) + layer 2 (carros NPC)
+	collision_mask = 3
 	add_to_group("player_car")
 
 func _set_em_uso(val: bool) -> void:
@@ -95,49 +100,87 @@ func _process(_delta: float) -> void:
 	elif err != OK:
 		_loader = null
 
+
+# ── Joystick ────────────────────────────────────────────────────────────────
+
+func _joystick():
+	var nos = get_tree().get_nodes_in_group("virtual_joystick")
+	return nos[0] if not nos.empty() else null
+
+
+# ── Entrada ─────────────────────────────────────────────────────────────────
+
+func _get_input(delta: float) -> void:
+	var throttle:   float = 0.0
+	var steer_dir:  float = 0.0
+
+	var joy = _joystick()
+	if joy != null and joy.output.length() > joy.dead_zone:
+		# Joystick analógico: eixo Y invertido (cima = avançar)
+		throttle  = -joy.output.y
+		steer_dir =  joy.output.x
+	else:
+		if Input.is_action_pressed("ui_up")    or Input.is_key_pressed(KEY_W): throttle  =  1.0
+		elif Input.is_action_pressed("ui_down") or Input.is_key_pressed(KEY_S): throttle  = -1.0
+		if Input.is_action_pressed("ui_right")  or Input.is_key_pressed(KEY_D): steer_dir =  1.0
+		elif Input.is_action_pressed("ui_left") or Input.is_key_pressed(KEY_A): steer_dir = -1.0
+
+	# ── Velocidade escalar (move_toward = feel arcade preservado) ────────────
+	if throttle > 0.0:
+		_speed = move_toward(_speed,  max_speed,    engine_power  * throttle * delta)
+	elif throttle < 0.0:
+		if _speed > 10.0:   # frente → frear
+			_speed = move_toward(_speed, 0.0, braking_power * abs(throttle) * delta)
+		else:               # parado ou em ré
+			_speed = move_toward(_speed, -max_speed_re, engine_power * abs(throttle) * delta)
+	else:
+		_speed = move_toward(_speed, 0.0, friction_dec * delta)
+
+	# ── Esterçamento: inversão automática em ré ──────────────────────────────
+	var steer = steer_dir * deg2rad(steering_angle)
+	if _speed < 0.0:
+		steer = -steer
+	_steer_angle = steer
+
+
+# ── Modelo bicicleta ─────────────────────────────────────────────────────────
+# Calcula nova direção e rotação a partir das posições das rodas.
+# Funciona para frente e ré sem degenerar.
+
+func _calculate_steering(delta: float) -> void:
+	if abs(_speed) < 1.0:
+		_velocity = Vector2.ZERO
+		return
+
+	var fwd         = -transform.y * _speed          # vetor de deslocamento
+	var rear_wheel  = position + transform.y * (wheel_base / 2.0)
+	var front_wheel = position - transform.y * (wheel_base / 2.0)
+	rear_wheel  += fwd * delta
+	front_wheel += fwd.rotated(_steer_angle) * delta
+
+	var new_heading = (front_wheel - rear_wheel).normalized()
+	if new_heading == Vector2.ZERO:
+		return
+
+	rotation  = atan2(new_heading.y, new_heading.x) + PI / 2.0
+	_velocity = new_heading * _speed
+
+
+# ── Loop principal ───────────────────────────────────────────────────────────
+
 func _physics_process(delta: float) -> void:
 	if not em_uso:
 		_pneu_esq_ant = null
 		_pneu_dir_ant = null
-		_vel_lateral = move_toward(_vel_lateral, 0.0, ATRITO_LATERAL * delta)
+		_speed    = move_toward(_speed, 0.0, friction_dec * delta)
+		_velocity = -transform.y * _speed
+		_velocity = move_and_slide(_velocity)
 		return
 
-	# ── Entrada ──────────────────────────────────────────────────────────────
-	var av: float = 0.0
-	if Input.is_action_pressed("ui_up") or Input.is_key_pressed(KEY_W):
-		av = 1.0
-	elif Input.is_action_pressed("ui_down") or Input.is_key_pressed(KEY_S):
-		av = -1.0
+	_get_input(delta)
+	_calculate_steering(delta)
 
-	var dir: float = 0.0
-	if Input.is_action_pressed("ui_right") or Input.is_key_pressed(KEY_D):
-		dir = 1.0
-	elif Input.is_action_pressed("ui_left") or Input.is_key_pressed(KEY_A):
-		dir = -1.0
-
-	# ── Velocidade ───────────────────────────────────────────────────────────
-	if av > 0.0:
-		_vel = move_toward(_vel, velocidade_maxima, aceleracao * delta)
-	elif av < 0.0:
-		if _vel > 30.0:
-			_vel = move_toward(_vel, 0.0, frenagem * delta)
-		else:
-			_vel = move_toward(_vel, -velocidade_maxima * velocidade_re, aceleracao * delta)
-	else:
-		_vel = move_toward(_vel, 0.0, atrito * delta)
-
-	# ── Rotação ──────────────────────────────────────────────────────────────
-	var fator: float = clamp(abs(_vel) / velocidade_maxima, 0.0, 1.0)
-	rotation_degrees += dir * 310.0 * fator * sign(_vel) * delta
-
-	# ── Derrapagem lateral ───────────────────────────────────────────────────
-	if abs(dir) > 0.0 and abs(_vel) > 80.0:
-		_vel_lateral += dir * fator * abs(_vel) * 0.45 * delta
-	_vel_lateral = clamp(_vel_lateral, -MAX_VEL_LATERAL, MAX_VEL_LATERAL)
-	_vel_lateral = move_toward(_vel_lateral, 0.0, ATRITO_LATERAL * delta)
-
-	# ── Movimento (frente + deriva) ──────────────────────────────────────────
-	move_and_slide(-transform.y * _vel + transform.x * _vel_lateral, Vector2.ZERO)
+	_velocity = move_and_slide(_velocity)
 
 	# ── Cooldowns de colisão ─────────────────────────────────────────────────
 	var _remover = []
@@ -152,7 +195,7 @@ func _physics_process(delta: float) -> void:
 		_col_cooldown.erase(key)
 
 	# ── Batida com carros NPC ────────────────────────────────────────────────
-	if abs(_vel) > 80.0:
+	if abs(_speed) > 80.0:
 		for i in get_slide_count():
 			var col = get_slide_collision(i)
 			if col == null or col.collider == null:
@@ -161,18 +204,16 @@ func _physics_process(delta: float) -> void:
 				continue
 			if _col_cooldown.has(col.collider):
 				continue
-			var impact = abs(_vel)
+			var impact = abs(_speed)
 			col.collider.receber_impacto(-col.normal * impact * 0.70)
-			var perda = clamp(impact / velocidade_maxima * 0.55, 0.15, 0.55)
-			_vel          *= (1.0 - perda)
-			_vel_lateral  += col.normal.y * impact * 0.15
-			_shake_ampl    = clamp(impact * 0.014, 5.0, 24.0)
-			_flash_timer   = FLASH_DURACAO
+			_speed      *= 0.50
+			_shake_ampl  = clamp(impact * 0.014, 5.0, 24.0)
+			_flash_timer = FLASH_DURACAO
 			_col_cooldown[col.collider] = 0.40
 			break
 
 	# ── Atropelamento ────────────────────────────────────────────────────────
-	var kmh = abs(_vel) * 0.131
+	var kmh = abs(_speed) * 0.131
 	if kmh > VEL_ATROPELO_KMH:
 		for ped in get_tree().get_nodes_in_group("pedestres"):
 			if is_instance_valid(ped) and not ped._morto:
@@ -183,8 +224,12 @@ func _physics_process(delta: float) -> void:
 	# ── Marcas de pneu ───────────────────────────────────────────────────────
 	var pneu_esq = to_global(PNEU_ESQ_LOCAL)
 	var pneu_dir = to_global(PNEU_DIR_LOCAL)
+	var derrapa  = false
+	if abs(_speed) > 100.0 and _velocity.length() > 10.0:
+		var heading = -transform.y
+		derrapa = abs(heading.cross(_velocity.normalized())) > LIMIAR_DERRAPA
 
-	if _pneu_esq_ant != null and abs(_vel_lateral) > LIMIAR_DERRAPA:
+	if _pneu_esq_ant != null and derrapa:
 		_adicionar_marca(_pneu_esq_ant, pneu_esq)
 		_adicionar_marca(_pneu_dir_ant, pneu_dir)
 
@@ -209,21 +254,22 @@ func _physics_process(delta: float) -> void:
 		_visual.modulate = Color(1, 1, 1)
 
 	# ── Zoom dinâmico ────────────────────────────────────────────────────────
+	var fator = clamp(abs(_speed) / max_speed, 0.0, 1.0)
 	var zoom_alvo: float = lerp(1.4, 2.2, fator)
 	_camera.zoom = lerp(_camera.zoom, Vector2(zoom_alvo, zoom_alvo), 4.0 * delta)
 
-	emit_signal("velocidade_mudou", abs(_vel) * 0.131)
+	emit_signal("velocidade_mudou", abs(_speed) * 0.131)
+
 
 func receber_impacto_externo(impulso: Vector2) -> void:
 	if not em_uso:
 		return
-	var fwd       = -transform.y
-	_vel         += impulso.dot(fwd) * 0.45
-	_vel_lateral += impulso.dot(transform.x) * 0.25
-	_shake_ampl   = clamp(impulso.length() * 0.010, 2.0, 12.0)
-	_flash_timer  = FLASH_DURACAO * 0.5
+	var fwd      = -transform.y
+	_speed      += impulso.dot(fwd) * 0.40
+	_speed       = clamp(_speed, -max_speed_re, max_speed)
+	_shake_ampl  = clamp(impulso.length() * 0.010, 2.0, 12.0)
+	_flash_timer = FLASH_DURACAO * 0.5
 
-# ── Marcas de pneu ───────────────────────────────────────────────────────────
 
 func _adicionar_marca(p1: Vector2, p2: Vector2) -> void:
 	if p1.distance_squared_to(p2) < 4.0:
@@ -236,7 +282,6 @@ func _adicionar_marca(p1: Vector2, p2: Vector2) -> void:
 	linha.z_index       = -5
 	get_parent().add_child(linha)
 	_marcas.append(linha)
-	# Remove marcas antigas
 	while _marcas.size() > MAX_MARCAS:
 		var antiga = _marcas.pop_front()
 		if is_instance_valid(antiga):
