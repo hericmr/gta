@@ -4,12 +4,13 @@ extends KinematicBody2D
 
 # ── Modelo bicicleta ────────────────────────────────────────────────────────
 export var wheel_base:     float = 150.0   # distância entre eixos (px)
-export var steering_angle: float = 22.0    # ângulo máximo de esterçamento (°)
-export var engine_power:   float = 600.0   # aceleração (px/s²)
+export var steering_angle: float = 45.0    # ângulo máximo de esterçamento (°)
+export var engine_power:   float = 900.0   # aceleração (px/s²)
 export var braking_power:  float = 900.0   # frenagem (px/s²)
-export var friction_dec:   float = 300.0   # desaceleração por atrito (px/s²)
+export var friction_dec:   float = 200.0   # desaceleração por atrito (px/s²)
 export var max_speed:      float = 1074.0
-export var max_speed_re:   float = 260.0   # máximo em ré
+export var turbo:		   float = 9000.0  # turbo bonus
+export var max_speed_re:   float = 460.0   # máximo em ré
 
 # Atropelamento
 const RAIO_ATROPELO    = 45.0
@@ -125,11 +126,8 @@ func _get_input(delta: float) -> void:
 	else:
 		_speed = move_toward(_speed, 0.0, friction_dec * delta)
 
-	# ── Esterçamento: inversão automática em ré ──────────────────────────────
-	var steer = steer_dir * deg2rad(steering_angle)
-	if _speed < 0.0:
-		steer = -steer
-	_steer_angle = steer
+	# ── Esterçamento ────────────────────────────────────────────────────────
+	_steer_angle = steer_dir * deg2rad(steering_angle)
 
 
 # ── Modelo bicicleta ─────────────────────────────────────────────────────────
@@ -199,6 +197,7 @@ func _physics_process(delta: float) -> void:
 			_shake_ampl  = clamp(impact * 0.014, 5.0, 24.0)
 			_flash_timer = FLASH_DURACAO
 			_col_cooldown[col.collider] = 0.40
+			Input.vibrate_handheld(clamp(int(impact * 0.15), 60, 400))
 			break
 
 	# ── Atropelamento ────────────────────────────────────────────────────────
@@ -211,6 +210,7 @@ func _physics_process(delta: float) -> void:
 					get_tree().call_group("hud", "registrar_atropelamento")
 					_shake_ampl  = clamp(kmh * 0.12, 5.0, 18.0)
 					_flash_timer = FLASH_DURACAO
+					Input.vibrate_handheld(120)
 
 	# ── Marcas de pneu ───────────────────────────────────────────────────────
 	var pneu_esq = to_global(PNEU_ESQ_LOCAL)

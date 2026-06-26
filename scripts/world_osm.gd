@@ -9,8 +9,9 @@ const CAMINHO_FEATURES   = "res://maps/santos_features.json"
 # 15 px ≈ 1 metro → carro (28 px) ≈ 1.9 m de largura
 const ESCALA = 15.0
 
-const PREDIOS_OSM_POR_FRAME  = 60
-const PREDIOS_2P5D_POR_FRAME = 400
+# Lazy loading por chunks: só carrega prédios perto do player
+const CHUNK_SIZE_PRE = 500    # unidades pré-ESCALA por chunk (= 7500 px de jogo)
+const RAIO_CHUNKS    = 1      # carrega 3×3 chunks ao redor do player
 
 # Cores base por tipo de prédio: [roof, wall, face]
 # Cada tier de altura escurece as cores pelo fator TIER_ESCURO.
@@ -27,11 +28,19 @@ const COR_BORDA   = Color(0.10, 0.08, 0.06, 0.85)
 
 var _dados        = null   # santos.json
 var _dados_2p5d   = null   # santos_predios_godot.json
-var _indice       = 0
-var _indice_2p5d  = 0
-var _corpo_global = null
-var _fase_2p5d    = false  # true quando OSM terminou e inicia 2p5d
-var _predios_dinamicos: Array = []  # [{pool, wall_px, centro, roof, quads}]
+var _corpo_global = null   # StaticBody2D de fallback (não usada para prédios lazy)
+var _predios_dinamicos: Array = []  # [{pool, wall_px, centro, roof, quads}] carregados
+
+# Chunk system
+var _predios_chunk:      Dictionary = {}  # "cx_cy" → Array de dados OSM
+var _predios_2p5d_chunk: Dictionary = {}  # "cx_cy" → Array de dados 2.5D
+var _corpos_chunk:       Dictionary = {}  # "cx_cy" → StaticBody2D com colisões
+var _visuais_chunk:      Dictionary = {}  # "cx_cy" → Array de nodes visuais 2.5D
+var _dinamicos_chunk:    Dictionary = {}  # "cx_cy" → Array de dicts parallax
+var _chunk_player:       Vector2    = Vector2(-999.0, -999.0)
+
+const TEX_GRAMA_SRC = preload("res://assets/texturas/grass03.png")
+const TILE_GRAMA    = 35.0   # unidades pré-escala por repetição de tile (35 u = 525 px de jogo)
 
 const URL_BASE         = "https://hericmr.github.io/gta"
 const URL_META         = URL_BASE + "/assets/tiles/meta.json"
@@ -70,34 +79,191 @@ func _finalizar():
 	_criar_ruas_visual()
 	_corpo_global = StaticBody2D.new()
 	add_child(_corpo_global)
-	set_process(true)
+	# Indexa prédios em chunks; carregamento acontece via atualizar_parallax()
+	_indexar_predios_por_chunk()
+	_indexar_predios_2p5d_por_chunk()
+	print("[WorldOSM] %d prédios OSM e %d 2.5D indexados em chunks." % [
+		_dados["predios"].size(), (_dados_2p5d["predios"].size() if _dados_2p5d else 0)])
+	_atualizar_chunks()   # carrega chunks iniciais (pode estar em (-999,-999) ainda)
 
 
-func _process(_delta):
-	# Fase 1: colisões OSM (santos.json)
-	if not _fase_2p5d:
-		if _dados == null or _indice >= len(_dados["predios"]):
-			_fase_2p5d = true
-			print("[WorldOSM] %d colisões OSM prontas." % _indice)
-			if _dados_2p5d == null:
-				set_process(false)
-			return
-		var fim = min(_indice + PREDIOS_OSM_POR_FRAME, len(_dados["predios"]))
-		for i in range(_indice, fim):
-			_criar_colisao_osm(_dados["predios"][i]["pontos"])
-		_indice = fim
+# ── Chunk system ──────────────────────────────────────────────────────────────
+
+func _chunk_key_pre(px: float, py: float) -> String:
+	return str(int(px / CHUNK_SIZE_PRE)) + "_" + str(int(py / CHUNK_SIZE_PRE))
+
+
+func _indexar_predios_por_chunk() -> void:
+	if _dados == null:
 		return
+	for predio in _dados["predios"]:
+		var pts = predio["pontos"]
+		if pts.empty():
+			continue
+		var cx = 0.0; var cy = 0.0
+		for p in pts:
+			cx += p[0]; cy += p[1]
+		cx /= pts.size(); cy /= pts.size()
+		var k = _chunk_key_pre(cx, cy)
+		if not _predios_chunk.has(k):
+			_predios_chunk[k] = []
+		_predios_chunk[k].append(predio)
 
-	# Fase 2: visuais 2.5D
-	if _dados_2p5d == null or _indice_2p5d >= len(_dados_2p5d["predios"]):
-		set_process(false)
-		print("[WorldOSM] %d prédios 2.5D carregados." % _indice_2p5d)
+
+func _indexar_predios_2p5d_por_chunk() -> void:
+	if _dados_2p5d == null:
 		return
+	for predio in _dados_2p5d["predios"]:
+		var pts = predio.get("poly_px", [])
+		if pts.empty():
+			continue
+		var cx = 0.0; var cy = 0.0
+		for p in pts:
+			cx += p[0]; cy += p[1]
+		cx /= pts.size(); cy /= pts.size()
+		var k = _chunk_key_pre(cx, cy)
+		if not _predios_2p5d_chunk.has(k):
+			_predios_2p5d_chunk[k] = []
+		_predios_2p5d_chunk[k].append(predio)
 
-	var fim = min(_indice_2p5d + PREDIOS_2P5D_POR_FRAME, len(_dados_2p5d["predios"]))
-	for i in range(_indice_2p5d, fim):
-		_criar_predio_2p5d(_dados_2p5d["predios"][i])
-	_indice_2p5d = fim
+
+func _atualizar_chunks() -> void:
+	var novos: Dictionary = {}
+	var cx0 = int(_chunk_player.x)
+	var cy0 = int(_chunk_player.y)
+	for dx in range(-RAIO_CHUNKS, RAIO_CHUNKS + 1):
+		for dy in range(-RAIO_CHUNKS, RAIO_CHUNKS + 1):
+			novos[str(cx0 + dx) + "_" + str(cy0 + dy)] = true
+
+	# Descarrega chunks fora do raio
+	for k in _corpos_chunk.keys():
+		if not novos.has(k):
+			_descarregar_chunk(k)
+
+	# Carrega novos chunks
+	for k in novos.keys():
+		if not _corpos_chunk.has(k):
+			_carregar_chunk(k)
+
+
+func _carregar_chunk(k: String) -> void:
+	var corpo = StaticBody2D.new()
+	add_child(corpo)
+	_corpos_chunk[k] = corpo
+
+	for predio in _predios_chunk.get(k, []):
+		_criar_colisao_em(corpo, predio["pontos"])
+
+	var visuais:   Array = []
+	var dinamicos: Array = []
+	for predio in _predios_2p5d_chunk.get(k, []):
+		var entry = _criar_predio_2p5d_lazy(corpo, predio, visuais)
+		if entry:
+			dinamicos.append(entry)
+			_predios_dinamicos.append(entry)
+	_visuais_chunk[k]   = visuais
+	_dinamicos_chunk[k] = dinamicos
+
+
+func _descarregar_chunk(k: String) -> void:
+	# Remove entradas de parallax
+	for entry in _dinamicos_chunk.get(k, []):
+		_predios_dinamicos.erase(entry)
+	_dinamicos_chunk.erase(k)
+
+	# Libera nós visuais 2.5D (borda, face, quads, telhado)
+	for no in _visuais_chunk.get(k, []):
+		if is_instance_valid(no):
+			no.queue_free()
+	_visuais_chunk.erase(k)
+
+	# Libera StaticBody2D → remove colisões do motor de física
+	if _corpos_chunk.has(k) and is_instance_valid(_corpos_chunk[k]):
+		_corpos_chunk[k].queue_free()
+	_corpos_chunk.erase(k)
+
+
+func _criar_colisao_em(corpo: StaticBody2D, pontos) -> void:
+	var pool = PoolVector2Array()
+	for p in pontos:
+		pool.append(Vector2(p[0], p[1]))
+	var forma = CollisionPolygon2D.new()
+	forma.polygon = pool
+	corpo.add_child(forma)
+
+
+func _criar_predio_2p5d_lazy(corpo: StaticBody2D, predio: Dictionary, visuais_list: Array):
+	var pontos = predio.get("poly_px", [])
+	if pontos.empty():
+		return null
+	var altura_m = float(predio.get("altura_m", 8.0))
+	var tipo     = predio.get("tipo", "geral")
+
+	var pool = PoolVector2Array()
+	for p in pontos:
+		pool.append(Vector2(p[0], p[1]))
+
+	var colisao = CollisionPolygon2D.new()
+	colisao.polygon = pool
+	corpo.add_child(colisao)
+
+	var tier: int
+	if   altura_m < 6.0:  tier = 0
+	elif altura_m < 15.0: tier = 1
+	elif altura_m < 30.0: tier = 2
+	else:                 tier = 3
+
+	var wall_px = clamp(altura_m * 0.45, 2.0, 22.0)
+	var n       = pool.size()
+	var cores   = TIPO_CORES.get(tipo, TIPO_CORES["geral"])
+	var escuro  = TIER_ESCURO[tier]
+	var c_roof  = Color(cores[0].r * escuro, cores[0].g * escuro, cores[0].b * escuro)
+	var c_wall  = Color(cores[1].r * escuro, cores[1].g * escuro, cores[1].b * escuro)
+	var c_face  = Color(cores[2].r * escuro, cores[2].g * escuro, cores[2].b * escuro)
+
+	var borda = Line2D.new()
+	for v in pool:
+		borda.add_point(v)
+	borda.add_point(pool[0])
+	borda.default_color  = COR_BORDA
+	borda.width          = 0.7
+	borda.joint_mode     = Line2D.LINE_JOINT_ROUND
+	borda.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	borda.end_cap_mode   = Line2D.LINE_CAP_ROUND
+	borda.z_index        = -4
+	add_child(borda)
+	visuais_list.append(borda)
+
+	var face = Polygon2D.new()
+	face.polygon = pool
+	face.color   = c_face
+	face.z_index = -3
+	add_child(face)
+	visuais_list.append(face)
+
+	var quads = []
+	for i in range(n):
+		var q     = Polygon2D.new()
+		q.color   = c_wall
+		q.z_index = -2
+		add_child(q)
+		quads.append(q)
+		visuais_list.append(q)
+
+	var visual = Polygon2D.new()
+	visual.polygon = pool
+	visual.color   = c_roof
+	visual.z_index = -1
+	add_child(visual)
+	visuais_list.append(visual)
+
+	return {
+		"pool":    pool,
+		"wall_px": wall_px,
+		"centro":  _centroide(pool),
+		"roof":    visual,
+		"quads":   quads,
+	}
 
 
 # ── HTML5: HTTPRequest ────────────────────────────────────────────────────────
@@ -421,6 +587,13 @@ func _criar_predio_2p5d(predio: Dictionary) -> void:
 # Features ficam acima do satélite (z=-10) e abaixo dos prédios 2.5D (z=-3→-1).
 # Dentro do mesmo z_index, nós adicionados depois ficam na frente (verde sobre praia).
 
+func _tex_repetida(src: Texture) -> ImageTexture:
+	var img = src.get_data()
+	var tex = ImageTexture.new()
+	tex.create_from_image(img, Texture.FLAG_REPEAT | Texture.FLAG_FILTER)
+	return tex
+
+
 func _criar_features(dados: Dictionary) -> void:
 	# Mar / Oceano Atlântico (z=-9) — abaixo da praia e dos jardins
 	for f in dados.get("mar", []):
@@ -461,16 +634,21 @@ func _criar_features(dados: Dictionary) -> void:
 		poly.z_index = -8
 		add_child(poly)
 
-	# Parques e jardins (z=-8, adicionados depois da praia → jardins sobre areia)
+	# Parques e jardins (z=-8) — textura de grama com tiling
+	var tex_grama = _tex_repetida(TEX_GRAMA_SRC)
 	for f in dados.get("verde", []):
 		var poly = Polygon2D.new()
 		var pts  = PoolVector2Array()
+		var uvs  = PoolVector2Array()
 		for p in f["poly_px"]:
 			pts.append(Vector2(p[0], p[1]))
+			uvs.append(Vector2(p[0] / TILE_GRAMA, p[1] / TILE_GRAMA))
 		if pts.size() < 3:
 			continue
 		poly.polygon = pts
-		poly.color   = Color(0.30, 0.58, 0.25, 0.80)
+		poly.uv      = uvs
+		poly.texture = tex_grama
+		poly.color   = Color(1.0, 1.0, 1.0, 0.92)
 		poly.z_index = -8
 		add_child(poly)
 
@@ -519,12 +697,18 @@ func _centroide(pool: PoolVector2Array) -> Vector2:
 	return c / pool.size()
 
 
-# Chamado por main.gd a cada frame — desloca telhado e paredes baseado no player
+# Chamado por main.gd a cada frame — atualiza chunks e parallax dos prédios 2.5D
 func atualizar_parallax(pos_jogo: Vector2) -> void:
+	# Lazy loading: verifica se o player mudou de chunk
+	var pos_pre    = pos_jogo / ESCALA
+	var chunk_novo = Vector2(int(pos_pre.x / CHUNK_SIZE_PRE), int(pos_pre.y / CHUNK_SIZE_PRE))
+	if chunk_novo != _chunk_player:
+		_chunk_player = chunk_novo
+		_atualizar_chunks()
+
 	if _predios_dinamicos.empty():
 		return
-	var pos_pre = pos_jogo / ESCALA
-	var raio2   = 250.0 * 250.0  # só atualiza prédios dentro de ~250 unidades pré-ESCALA
+	var raio2 = 250.0 * 250.0  # só atualiza prédios dentro de ~250 unidades pré-ESCALA
 
 	for dados in _predios_dinamicos:
 		var centro: Vector2 = dados.centro

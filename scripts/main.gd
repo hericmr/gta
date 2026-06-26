@@ -18,6 +18,8 @@ onready var _onibus   = $NpcOnibusTraffic
 onready var _touch_ui = $TouchUI/Control
 
 func _ready() -> void:
+	if OS.get_name() in ["Android", "iOS"]:
+		OS.window_fullscreen = true
 	_car.connect("velocidade_mudou", _hud, "atualizar_velocidade")
 
 	if _world.has_meta("satelite_stream"):

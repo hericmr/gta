@@ -114,7 +114,21 @@ func atropelar() -> void:
 		_sprite.scale    = Vector2(2.0, 2.0)
 		_sprite.modulate = _cor_topo   # cadáver mantém a cor da camisa
 	z_index = 2
-	_criar_mancha_sangue(position)
+	_sangue_pos    = position
+	_sangue_timer  = 1.0
+
+
+var _sangue_pos:   Vector2 = Vector2.ZERO
+var _sangue_timer: float   = -1.0
+
+
+func _process(delta: float) -> void:
+	if _sangue_timer < 0.0:
+		return
+	_sangue_timer -= delta
+	if _sangue_timer <= 0.0:
+		_sangue_timer = -1.0
+		_criar_mancha_sangue(_sangue_pos)
 
 
 func _criar_mancha_sangue(pos: Vector2) -> void:
@@ -124,7 +138,7 @@ func _criar_mancha_sangue(pos: Vector2) -> void:
 	sangue.texture  = TEX_SANGUE
 	sangue.position = pos
 	sangue.rotation = randf() * TAU
-	sangue.scale    = Vector2(4.5, 4.5)
+	sangue.scale    = Vector2(2.25, 2.25)
 	sangue.z_index  = 1   # abaixo do cadáver (z=2) e dos veículos (z=5)
 	get_parent().add_child(sangue)
 

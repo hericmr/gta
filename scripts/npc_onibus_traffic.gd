@@ -4,7 +4,7 @@ extends Node2D
 const NpcOnibusScript = preload("res://scripts/npc_onibus.gd")
 
 const ESCALA            = 15.0
-const N_ONIBUS          = 288    # frota real de Santos: 288 ônibus
+var N_ONIBUS: int = 288    # frota real de Santos; reduzido para 60 no celular
 const DIST_PARADA_WP    = 300.0  # raio (px) para associar parada ao waypoint mais próximo
 const MIN_WPS           = 2     # rota com menos pontos é ignorada
 

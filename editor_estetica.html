@@ -294,6 +294,12 @@ input[type=range] {
       </div>
     </div>
 
+    <!-- Features geográficas -->
+    <div>
+      <div class="section-title">Features Geográficas</div>
+      <div id="feat-rows"></div>
+    </div>
+
     <!-- Fundo -->
     <div>
       <div class="section-title">Fundo & Calçada</div>
@@ -346,6 +352,16 @@ input[type=range] {
 <div id="hidden-pickers" style="position:absolute; left:-9999px;"></div>
 
 <script>
+// ── Features geográficas ──────────────────────────────────────────────────────
+const FEATURES = [
+  { id: 'mar',    label: 'Mar',    tipo: 'poly', cor: '#1f599e', alfa: 0.70 },
+  { id: 'porto',  label: 'Porto',  tipo: 'poly', cor: '#615248', alfa: 0.75 },
+  { id: 'praia',  label: 'Praia',  tipo: 'poly', cor: '#ddd19e', alfa: 0.80 },
+  { id: 'verde',  label: 'Jardim', tipo: 'poly', cor: '#4d9440', alfa: 0.80 },
+  { id: 'agua',   label: 'Água',   tipo: 'poly', cor: '#2e72b8', alfa: 0.85 },
+  { id: 'canais', label: 'Canais', tipo: 'linha', cor: '#2e80c7', alfa: 0.90 },
+];
+
 // ── Categorias de via ─────────────────────────────────────────────────────────
 const CATEGORIAS = [
   { id: 'rodovia',   label: 'Rodovia',       sub: 'largura ≥ 11',  minL: 11, maxL: 99,  cor: '#e8d060', alfa: 0.90, mult: 1.4, calçada: true  },
@@ -359,6 +375,7 @@ const CATEGORIAS = [
 // ── Estado ────────────────────────────────────────────────────────────────────
 let dados = null;
 let dadosPredios = null;
+let dadosFeatures = null;
 let cam = { x: 0, y: 0, zoom: 1 };
 let pan = { dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 };
 
@@ -400,6 +417,77 @@ async function carregarDados() {
     const r2 = await fetch('maps/santos_predios_godot.json');
     if (r2.ok) dadosPredios = await r2.json();
   } catch(_) {}
+
+  // Carrega features geográficas (mar, praia, jardim, porto, canais…)
+  try {
+    const r3 = await fetch('maps/santos_features.json');
+    if (r3.ok) {
+      dadosFeatures = await r3.json();
+      const totais = FEATURES.map(f => `${f.label}:${(dadosFeatures[f.id]||[]).length}`).join(' ');
+      console.log('[Features] ' + totais);
+    }
+  } catch(_) {}
+  render();
+}
+
+// ── Features UI ───────────────────────────────────────────────────────────────
+function buildFeaturesUI() {
+  const container = document.getElementById('feat-rows');
+  const pickerDiv = document.getElementById('hidden-pickers');
+
+  FEATURES.forEach(feat => {
+    feat.visivel = true;
+
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.id = 'picker-feat-' + feat.id;
+    picker.value = feat.cor;
+    picker.addEventListener('input', () => {
+      feat.cor = picker.value;
+      btn.style.background = feat.cor;
+      render();
+    });
+    pickerDiv.appendChild(picker);
+
+    const btn = document.createElement('button');
+    btn.className = 'color-btn';
+    btn.style.background = feat.cor;
+    btn.title = 'Mudar cor';
+    btn.onclick = () => picker.click();
+
+    const vis = document.createElement('input');
+    vis.type = 'checkbox';
+    vis.checked = true;
+    vis.style.accentColor = 'var(--accent)';
+    vis.addEventListener('change', () => { feat.visivel = vis.checked; render(); });
+
+    const row = document.createElement('div');
+    row.className = 'cat-row';
+    const labelDiv = document.createElement('div');
+    const tipoTag = feat.tipo === 'linha' ? 'linha' : 'polígono';
+    labelDiv.innerHTML = `<span class="cat-label">${feat.label}</span><span class="cat-sub">${tipoTag}</span>`;
+    row.appendChild(labelDiv);
+    row.appendChild(vis);
+    row.appendChild(btn);
+    container.appendChild(row);
+
+    const sliders = document.createElement('div');
+    sliders.className = 'slider-wrap';
+    sliders.style.marginBottom = '4px';
+    sliders.innerHTML = `
+      <div class="slider-row">
+        <label>Opacidade</label>
+        <input type="range" id="alfa-feat-${feat.id}" min="0" max="1" step="0.01" value="${feat.alfa}">
+        <span id="alfa-feat-${feat.id}-val">${(feat.alfa*100).toFixed(0)}%</span>
+      </div>`;
+    container.appendChild(sliders);
+
+    document.getElementById(`alfa-feat-${feat.id}`).addEventListener('input', function() {
+      feat.alfa = parseFloat(this.value);
+      document.getElementById(`alfa-feat-${feat.id}-val`).textContent = (feat.alfa*100).toFixed(0)+'%';
+      render();
+    });
+  });
 }
 
 // ── Categorias UI ─────────────────────────────────────────────────────────────
@@ -531,6 +619,41 @@ function render() {
   const showRuas    = document.getElementById('show-ruas').checked;
   const showPredios = document.getElementById('show-predios').checked;
   const showOneway  = document.getElementById('show-oneway').checked;
+
+  // features geográficas (mar → porto → praia → jardim → água → canais)
+  if (dadosFeatures) {
+    for (const feat of FEATURES) {
+      if (!feat.visivel) continue;
+      const itens = dadosFeatures[feat.id] || [];
+      const corRgba = hexComAlfa(feat.cor, feat.alfa);
+      if (feat.tipo === 'poly') {
+        for (const f of itens) {
+          const pts = f.poly_px;
+          if (!pts || pts.length < 3) continue;
+          ctx.beginPath();
+          ctx.moveTo(pts[0][0], pts[0][1]);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+          ctx.closePath();
+          ctx.fillStyle = corRgba;
+          ctx.fill();
+        }
+      } else {
+        // canais: linhas
+        for (const c of itens) {
+          const pts = c.pontos;
+          if (!pts || pts.length < 2) continue;
+          ctx.beginPath();
+          ctx.moveTo(pts[0][0], pts[0][1]);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+          ctx.strokeStyle = corRgba;
+          ctx.lineWidth = (c.largura || 15);
+          ctx.lineCap  = 'round';
+          ctx.lineJoin = 'round';
+          ctx.stroke();
+        }
+      }
+    }
+  }
 
   // calçadas (ruas com largura aumentada)
   if (showRuas) {
@@ -760,6 +883,13 @@ function atualizarEstatisticas() {
   });
   html += `Mão única: <span style="color:#fc7">${oneway}</span><br>`;
   html += `Prédios OSM: <span style="color:#7cf">${dados.predios.length}</span>`;
+  if (dadosFeatures) {
+    html += '<br>';
+    for (const feat of FEATURES) {
+      const n = (dadosFeatures[feat.id] || []).length;
+      html += `${feat.label}: <span style="color:#7cf">${n}</span><br>`;
+    }
+  }
   document.getElementById('stats').innerHTML = html;
 }
 
@@ -855,6 +985,7 @@ function hexParaRGBF(hex) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+buildFeaturesUI();
 buildCatsUI();
 resizeCanvas();
 carregarDados();

@@ -12,18 +12,25 @@ const MARGEM             = 600.0
 const LARGURA_MIN_CARRO  = 5     # ruas com largura < 5 → só pedestres
 
 # Carros
-const N_CARROS   = 20
 const VEL_MIN    = 400.0
 const VEL_MAX    = 720.0
 
 # Pedestres
-const N_PEDESTRES  = 120
 const VEL_PED_MIN  = 150.0
 const VEL_PED_MAX  = 210.0
+
+# Contagem: reduzida automaticamente no celular
+var N_CARROS    = 20
+var N_PEDESTRES = 120
 
 const RAIO_SPAWN   = 5000.0
 const RAIO_DESPAWN = 7500.0
 const MIN_PTS      = 4
+
+# Grafo de conectividade
+const RAIO_CONEXAO  = 60.0   # px — distância máxima entre endpoints para pré-conectar ruas
+const GRADE_CONEXAO = 250.0  # px — célula da grade auxiliar usada na construção do grafo
+const SNAP_VIZIN    = 2      # células ±N toleradas na busca de saídas em tempo real
 
 var _ruas_carro:  Array      = []
 var _ruas_ped:    Array      = []
@@ -274,34 +281,42 @@ func _on_fim_npc(npc, ruas, grafo, wps_dict, ow_dict, v_min, v_max) -> void:
 	var wps_atual: PoolVector2Array = wps_dict.get(npc, PoolVector2Array())
 	var vel = lerp(v_min, v_max, randf())
 
-	# ── Tenta seguir a próxima rua conectada ─────────────────────────────────
+	# ── Segue a próxima rua conectada pelo grafo ──────────────────────────────
 	if wps_atual.size() >= 2:
-		var fim   = wps_atual[wps_atual.size() - 1]
-		var saidas: Array = _buscar_saidas(grafo, fim)
+		var fim    = wps_atual[wps_atual.size() - 1]
+		var saidas = _buscar_saidas(grafo, fim)
 		if not saidas.empty():
-			# Remove a rota de onde viemos (evita inversão trivial como única opção)
 			var inicio_atual = wps_atual[0]
+			# Filtra rotas que levam de volta para onde viemos
 			var candidatas = []
 			for s in saidas:
-				# Filtra: rota que leva de volta ao início da rua atual
 				if s["wps"][s["wps"].size() - 1].distance_to(inicio_atual) > 50.0:
 					candidatas.append(s)
 			if candidatas.empty():
-				candidatas = saidas  # fallback: aceita qualquer saída
+				candidatas = saidas
 			var proxima = candidatas[randi() % candidatas.size()]
 			npc.inicializar(proxima["wps"], vel, 0)
 			wps_dict[npc] = proxima["wps"]
 			ow_dict[npc]  = proxima["oneway"]
 			return
 
-	# ── Sem conexão no grafo: usa lógica anterior ─────────────────────────────
+	# ── Grafo falhou: tenta rua próxima antes de inverter ────────────────────
 	var rect = _rect_visivel()
 	if rect.has_point(npc.position):
-		if not ow_dict.get(npc, false):
+		var rua_prox = _rua_mais_proxima(ruas, npc.position, 2500.0)
+		if not rua_prox.empty():
+			var wps_prox: PoolVector2Array = rua_prox["wps"]
+			if not rua_prox["oneway"] and randi() % 2 == 0:
+				wps_prox = _inverter(wps_prox)
+			npc.inicializar(wps_prox, vel, 0)
+			wps_dict[npc] = wps_prox
+			ow_dict[npc]  = rua_prox["oneway"]
+			return
+		# Último recurso: inverte (mão dupla apenas)
+		if not ow_dict.get(npc, false) and wps_atual.size() > 0:
 			var inv = _inverter(wps_atual)
-			if inv.size() > 0:
-				npc.inicializar(inv, vel, 0)
-				wps_dict[npc] = inv
+			npc.inicializar(inv, vel, 0)
+			wps_dict[npc] = inv
 	else:
 		_resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect)
 
@@ -347,43 +362,88 @@ func _snap_key(pos: Vector2) -> String:
 	return str(int(round(pos.x / ESCALA))) + "_" + str(int(round(pos.y / ESCALA)))
 
 
-# Busca saídas no grafo — checa célula exata primeiro, depois vizinhança 3×3
+# Busca saídas no grafo — tolerância ±SNAP_VIZIN células para cobrir imprecisão de float
 func _buscar_saidas(grafo: Dictionary, pos: Vector2) -> Array:
 	var cx = int(round(pos.x / ESCALA))
 	var cy = int(round(pos.y / ESCALA))
-	# Centro primeiro (correspondência exata)
-	var k0 = str(cx) + "_" + str(cy)
-	if grafo.has(k0):
-		return grafo[k0]
-	# Vizinhança para tolerar pequenas diferenças de float
-	for dx in [-1, 1, 0]:
-		for dy in [-1, 1, 0]:
-			if dx == 0 and dy == 0:
-				continue
+	# Coleta TODAS as saídas dentro da vizinhança (não para na primeira)
+	var resultado: Array = []
+	for dx in range(-SNAP_VIZIN, SNAP_VIZIN + 1):
+		for dy in range(-SNAP_VIZIN, SNAP_VIZIN + 1):
 			var k = str(cx + dx) + "_" + str(cy + dy)
 			if grafo.has(k):
-				return grafo[k]
-	return []
+				resultado.append_array(grafo[k])
+	return resultado
 
 
+# Constrói o grafo pré-computando conexões com raio RAIO_CONEXAO:
+# para cada ponto de saída de uma rua, encontra TODAS as ruas que partem de dentro desse raio.
+# Isso torna o grafo robusto a imprecisões GPS e a ruas que quase se tocam nas interseções.
 func _construir_grafo(ruas: Array) -> Dictionary:
-	var grafo = {}
+	# Fase 1: coleta todos os pontos de entrada (início de cada percurso possível)
+	var entradas: Array = []
 	for rua in ruas:
 		var wps: PoolVector2Array = rua["wps"]
 		if wps.size() < 2:
 			continue
-		# Rua percorrida da frente para trás (entrada pelo início)
-		var k0 = _snap_key(wps[0])
-		if not grafo.has(k0):
-			grafo[k0] = []
-		grafo[k0].append({"wps": wps, "oneway": rua["oneway"]})
-		# Mão dupla: também pode ser percorrida do fim para a frente
+		entradas.append({"pos": wps[0], "wps": wps, "ow": rua["oneway"]})
 		if not rua["oneway"]:
-			var k1 = _snap_key(wps[wps.size() - 1])
-			if not grafo.has(k1):
-				grafo[k1] = []
-			grafo[k1].append({"wps": _inverter(wps), "oneway": false})
+			var inv = _inverter(wps)
+			entradas.append({"pos": inv[0], "wps": inv, "ow": false})
+
+	# Fase 2: indexa entradas numa grade espacial grosseira para busca eficiente O(1)
+	var grade: Dictionary = {}
+	for e in entradas:
+		var gk = str(int(e["pos"].x / GRADE_CONEXAO)) + "_" + str(int(e["pos"].y / GRADE_CONEXAO))
+		if not grade.has(gk):
+			grade[gk] = []
+		grade[gk].append(e)
+
+	# Fase 3: para cada ponto de saída, pré-computa as ruas conectadas dentro de RAIO_CONEXAO
+	var grafo: Dictionary = {}
+	for rua in ruas:
+		var wps: PoolVector2Array = rua["wps"]
+		if wps.size() < 2:
+			continue
+		_grafo_preencher_saida(grafo, wps[wps.size() - 1], grade)
+		if not rua["oneway"]:
+			_grafo_preencher_saida(grafo, wps[0], grade)
+
+	var total = 0
+	for k in grafo:
+		total += grafo[k].size()
+	print("[Traffic] grafo: %d nós, %d conexões" % [grafo.size(), total])
 	return grafo
+
+
+func _grafo_preencher_saida(grafo: Dictionary, pos_saida: Vector2, grade: Dictionary) -> void:
+	var chave = _snap_key(pos_saida)
+	if not grafo.has(chave):
+		grafo[chave] = []
+	var gcx = int(pos_saida.x / GRADE_CONEXAO)
+	var gcy = int(pos_saida.y / GRADE_CONEXAO)
+	# Verifica células vizinhas da grade auxiliar (2×2 cobre o raio)
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			var gk = str(gcx + dx) + "_" + str(gcy + dy)
+			if not grade.has(gk):
+				continue
+			for e in grade[gk]:
+				if e["pos"].distance_to(pos_saida) <= RAIO_CONEXAO:
+					grafo[chave].append({"wps": e["wps"], "oneway": e["ow"]})
+
+
+func _rua_mais_proxima(ruas: Array, pos: Vector2, raio: float) -> Dictionary:
+	var melhor   = {}
+	var melhor_d = raio
+	for rua in ruas:
+		var wps: PoolVector2Array = rua["wps"]
+		var meio = wps[wps.size() / 2]
+		var d = meio.distance_to(pos)
+		if d < melhor_d:
+			melhor_d = d
+			melhor   = rua
+	return melhor
 
 
 # ── API pública ───────────────────────────────────────────────────────────────
