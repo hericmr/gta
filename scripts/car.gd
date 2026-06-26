@@ -7,7 +7,7 @@ export var engine_power:   float = 900.0
 export var braking:        float = 450.0
 export var friction:       float = -55.0
 export var drag:           float = -0.06
-export var max_speed_re:   float = 250.0
+export var max_speed_re:   float = 950.0
 export var max_speed:      float = 774.0  # referência para câmera/HUD
 export var turbo:          float = 9000.0
 
