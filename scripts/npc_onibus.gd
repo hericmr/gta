@@ -2,14 +2,14 @@
 extends KinematicBody2D
 
 # Física do ônibus: mais lento, aceleração/frenagem suaves, maior inércia
-const MAX_SPEED       = 420.0
-const ENGINE_POWER    = 120.0
-const BRAKING_POWER   = 85.0
+const MAX_SPEED       = 560.0
+const ENGINE_POWER    = 140.0
+const BRAKING_POWER   = 110.0
 
 # Thresholds de waypoint / parada
 const DIST_WP           = 80.0
-const DIST_INICIO_FREAR = 350.0
-const DIST_PARADO       = 40.0
+const DIST_INICIO_FREAR = 1600.0  # v²/2a = 560²/220 ≈ 1425 px → margem extra
+const DIST_PARADO       = 180.0   # raio generoso: GPS não é preciso ao metro
 const ESPERA_PARADA_MIN = 3.0
 const ESPERA_PARADA_MAX = 6.0
 
@@ -31,11 +31,13 @@ var _speed:       float  = 0.0
 var _estado:      int    = Estado.DIRIGINDO
 var _wait_timer:  float  = 0.0
 var _terminado:   bool   = false
-var _passageiros: Array  = []   # pedestres NPC embarcados
-var _pos_ant:     Vector2 = Vector2.ZERO
-var _stuck_t:     float   = 0.0
-const STUCK_DIST2 = 100.0
-const STUCK_TEMPO = 6.0   # ônibus tolera mais tempo parado (pode estar em ponto)
+var _passageiros:  Array   = []
+var _pos_check:    Vector2 = Vector2.ZERO   # posição amostrada periodicamente
+var _check_timer:  float   = 0.0
+var _stuck_t:      float   = 0.0
+const STUCK_INTERVALO  = 3.0      # amostra posição a cada 3 s
+const STUCK_MIN_DIST   = 200.0    # deve mover ao menos 200 px em 3 s para não ser stuck
+const STUCK_LIMITE     = 9.0      # após 9 s parado → despawn (3 intervalos)
 
 signal chegou_ao_fim
 
@@ -134,16 +136,20 @@ func _tick_dirigindo(delta: float) -> void:
 	_speed   = move_toward(_speed, MAX_SPEED, ENGINE_POWER * delta)
 	move_and_slide(-transform.y * _speed)
 
-	# Despawn por travamento (ônibus fora da rota ou bloqueado)
-	if position.distance_squared_to(_pos_ant) < STUCK_DIST2:
-		_stuck_t += delta
-		if _stuck_t >= STUCK_TEMPO:
-			_stuck_t   = 0.0
-			_terminado = true
-			emit_signal("chegou_ao_fim")
-	else:
-		_stuck_t = 0.0
-	_pos_ant = position
+	# Despawn por travamento: verifica deslocamento a cada STUCK_INTERVALO segundos
+	_check_timer += delta
+	if _check_timer >= STUCK_INTERVALO:
+		var moveu = position.distance_to(_pos_check)
+		if moveu < STUCK_MIN_DIST:
+			_stuck_t += STUCK_INTERVALO
+			if _stuck_t >= STUCK_LIMITE:
+				_stuck_t = 0.0
+				_terminado = true
+				emit_signal("chegou_ao_fim")
+		else:
+			_stuck_t = 0.0
+		_pos_check   = position
+		_check_timer = 0.0
 
 
 func _tick_freando(delta: float) -> void:
@@ -154,21 +160,24 @@ func _tick_freando(delta: float) -> void:
 	var diff = _wps[_idx] - position
 	var dist = diff.length()
 
-	if dist < DIST_PARADO:
-		_speed      = 0.0
-		_estado     = Estado.PARADO_PONTO
-		_wait_timer = lerp(ESPERA_PARADA_MIN, ESPERA_PARADA_MAX, randf())
-		print("[Onibus] parada wp=%d  passageiros=%d  pos=%s" % [_idx, _passageiros.size(), position])
-		_desembarcar()   # passageiros saem ao chegar na parada
-		return
-
 	rotation = atan2(diff.y, diff.x) + PI * 0.5
 	_speed   = move_toward(_speed, 0.0, BRAKING_POWER * delta)
 	if _speed > 2.0:
 		move_and_slide(-transform.y * _speed)
 
+	# Chega à parada por proximidade OU por velocidade zerada (overshooting)
+	if dist < DIST_PARADO or _speed < 2.0:
+		_speed      = 0.0
+		_estado     = Estado.PARADO_PONTO
+		_wait_timer = lerp(ESPERA_PARADA_MIN, ESPERA_PARADA_MAX, randf())
+		print("[Onibus] parada wp=%d  passageiros=%d  pos=%s" % [_idx, _passageiros.size(), position])
+		_desembarcar()
+
 
 func _tick_parado(delta: float) -> void:
+	_pos_check   = position   # evita stuck-detection ao retomar movimento
+	_check_timer = 0.0
+	_stuck_t     = 0.0
 	_wait_timer -= delta
 	if _wait_timer <= 0.0:
 		_embarcar()      # novos passageiros sobem antes de partir

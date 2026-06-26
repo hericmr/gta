@@ -42,6 +42,8 @@ var _ref             = null
 var _process_timer:  float = 0.0
 const PROCESS_INTERVAL = 0.5
 
+var _paradas_onibus: Array = []   # posições (px) das paradas de ônibus de Santos
+
 
 func _ready() -> void:
 	if OS.get_name() == "HTML5":
@@ -73,6 +75,7 @@ func _on_json_carregado(_result, code, _headers, body) -> void:
 
 
 func _carregar_ruas() -> void:
+	_carregar_paradas_onibus()   # precisa estar pronto antes de spawnar pedestres
 	var arq = File.new()
 	if not arq.file_exists("res://maps/santos.json"):
 		push_warning("[Traffic] santos.json não encontrado")
@@ -82,6 +85,22 @@ func _carregar_ruas() -> void:
 	arq.close()
 	if d:
 		_processar_ruas(d)
+
+
+func _carregar_paradas_onibus() -> void:
+	var arq = File.new()
+	var caminho = "res://newdata/linhas_onibus.json"
+	if not arq.file_exists(caminho):
+		return
+	arq.open(caminho, File.READ)
+	var dados = parse_json(arq.get_as_text())
+	arq.close()
+	if not dados:
+		return
+	for linha in dados.get("linhas", []):
+		for p in linha.get("paradas_px", []):
+			_paradas_onibus.append(Vector2(p["x"] * ESCALA, p["y"] * ESCALA))
+	print("[Traffic] %d paradas de ônibus indexadas" % _paradas_onibus.size())
 
 
 func _offset_wps(wps: PoolVector2Array, offset: float) -> PoolVector2Array:
@@ -121,7 +140,8 @@ func _processar_ruas(d: Dictionary) -> void:
 		if largura >= LARGURA_MIN_CARRO:
 			_ruas_carro.append(entrada)
 			# Gera calçadas paralelas em ambos os lados da rua
-			var offset_px = (largura * 0.5 + 2.5) * ESCALA
+			var offset_extra = 5.5 if largura >= 7 else 3.5
+			var offset_px = (largura * 0.5 + offset_extra) * ESCALA
 			var cal_esq = _offset_wps(arr, offset_px)
 			var cal_dir = _offset_wps(arr, -offset_px)
 			if cal_esq.size() >= MIN_PTS:
@@ -191,11 +211,36 @@ func _criar_npc(ruas, wps_dict, ow_dict, script_res, v_min, v_max, cb):
 	var c = script_res.new()
 	add_child(c)
 	var vel = lerp(v_min, v_max, randf())
-	c.inicializar(info.wps, vel, info.start)
-	wps_dict[c] = info.wps
+	var wps = info.wps
+	# 25% dos pedestres caminham até a parada de ônibus mais próxima
+	if script_res == NpcPedestreScript and not _paradas_onibus.empty() and randf() < 0.25:
+		var parada = _parada_proxima(wps[info.start], 6000.0)
+		if parada != Vector2.ZERO:
+			wps = PoolVector2Array(wps)
+			wps.append(parada)
+	c.inicializar(wps, vel, info.start)
+	wps_dict[c] = wps
 	ow_dict[c]  = info.oneway
 	c.connect("chegou_ao_fim", self, cb, [c])
 	return c
+
+
+func _parada_proxima(pos: Vector2, raio: float) -> Vector2:
+	var melhor   = Vector2.ZERO
+	var melhor_d = raio
+	for p in _paradas_onibus:
+		var d = p.distance_to(pos)
+		if d < melhor_d:
+			melhor_d = d
+			melhor   = p
+	return melhor
+
+
+func _perto_de_parada(pos: Vector2, raio: float) -> bool:
+	for p in _paradas_onibus:
+		if p.distance_to(pos) < raio:
+			return true
+	return false
 
 
 func _resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect) -> void:
@@ -215,6 +260,11 @@ func _on_fim_carro(carro) -> void:
 	_on_fim_npc(carro, _ruas_carro, _grafo_carro, _car_wps, _car_ow, VEL_MIN, VEL_MAX)
 
 func _on_fim_ped(ped) -> void:
+	if not is_instance_valid(ped):
+		return
+	# Se chegou perto de uma parada, fica esperando o ônibus
+	if not _paradas_onibus.empty() and _perto_de_parada(ped.position, 230.0):
+		return
 	_on_fim_npc(ped, _ruas_ped, _grafo_ped, _ped_wps, _ped_ow, VEL_PED_MIN, VEL_PED_MAX)
 
 func _on_fim_npc(npc, ruas, grafo, wps_dict, ow_dict, v_min, v_max) -> void:

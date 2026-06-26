@@ -1,7 +1,7 @@
 # player.gd — Personagem a pé, top-down (Godot 3)
 extends KinematicBody2D
 
-const VELOCIDADE    = 200.0
+const VELOCIDADE    = 240.0
 const VELOCIDADE_RE = 100.0
 const VEL_ROTACAO   = 230.0
 const FPS_ANIM      = 8.0

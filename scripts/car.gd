@@ -61,7 +61,8 @@ func parar() -> void:
 
 func _ready() -> void:
 	_radio.connect("finished", self, "_on_radio_finished")
-	collision_mask = 3
+	collision_layer = 2   # fora do mask=1 dos pedestres → sem solavanco no atropelamento
+	collision_mask  = 3
 	add_to_group("player_car")
 
 func _set_em_uso(val: bool) -> void:

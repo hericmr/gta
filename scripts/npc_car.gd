@@ -11,9 +11,9 @@ const DIST_FRENTE_MAX = 220.0   # começa a desacelerar a esta distância
 const DIST_FRENTE_MIN = 70.0    # distância mínima (abaixo = para)
 const CONE_FRENTE     = 0.65    # cos(~49°) — ângulo do cone de detecção
 
-# Despawn por travamento (GTA 1/2: veículo preso some e reaparece)
-const STUCK_DIST2  = 100.0   # deslocamento² mínimo por intervalo
-const STUCK_TEMPO  = 3.5     # segundos parado antes de despawnar
+# Despawn por travamento: se mover < STUCK_DIST2 px em STUCK_TEMPO s → despawn
+const STUCK_DIST2  = 150.0   # px mínimos em STUCK_TEMPO segundos
+const STUCK_TEMPO  = 3.5     # intervalo de verificação (segundos)
 
 const CORES = [
 	Color(0.80, 0.20, 0.20), Color(0.20, 0.42, 0.85),
@@ -36,12 +36,13 @@ const POLIGONO = PoolVector2Array([
 	Vector2(29.854, 65.766),  Vector2(9.658, 65.766),
 ])
 
-var _wps:       PoolVector2Array = PoolVector2Array()
-var _idx:       int   = 0
-var _vel:       float = 350.0
-var _terminado: bool  = false
-var _pos_ant:   Vector2 = Vector2.ZERO
-var _stuck_t:   float   = 0.0
+var _wps:         PoolVector2Array = PoolVector2Array()
+var _idx:         int   = 0
+var _vel:         float = 350.0
+var _terminado:   bool  = false
+var _pos_check:   Vector2 = Vector2.ZERO
+var _check_timer: float   = 0.0
+var _stuck_t:     float   = 0.0
 
 signal chegou_ao_fim
 
@@ -74,12 +75,13 @@ func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 	_wps       = wps
 	_vel       = vel
 	_terminado = false
-	_stuck_t   = 0.0
+	_stuck_t     = 0.0
+	_check_timer = 0.0
 	var n = wps.size()
 	_idx = start if start < n else (n - 1 if n > 0 else 0)
 	if _idx < _wps.size():
-		position  = _wps[_idx]
-		_pos_ant  = position
+		position   = _wps[_idx]
+		_pos_check = position
 		if _idx + 1 < _wps.size():
 			var dir = (_wps[_idx + 1] - _wps[_idx]).normalized()
 			rotation = atan2(dir.y, dir.x) + PI * 0.5
@@ -109,16 +111,14 @@ func _physics_process(delta: float) -> void:
 	var fator = _fator_proximidade()
 	move_and_slide(-transform.y * _vel * fator)
 
-	# ── Despawn por travamento ────────────────────────────────────────────────
-	if position.distance_squared_to(_pos_ant) < STUCK_DIST2:
-		_stuck_t += delta
-		if _stuck_t >= STUCK_TEMPO:
-			_stuck_t   = 0.0
+	# ── Despawn por travamento (amostra a cada STUCK_TEMPO segundos) ─────────
+	_check_timer += delta
+	if _check_timer >= STUCK_TEMPO:
+		if position.distance_to(_pos_check) < STUCK_DIST2:
 			_terminado = true
 			emit_signal("chegou_ao_fim")
-	else:
-		_stuck_t = 0.0
-	_pos_ant = position
+		_pos_check   = position
+		_check_timer = 0.0
 
 
 # Retorna fator 0..1 baseado na distância ao veículo mais próximo à frente.

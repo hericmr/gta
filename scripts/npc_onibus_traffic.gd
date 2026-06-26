@@ -6,7 +6,7 @@ const NpcOnibusScript = preload("res://scripts/npc_onibus.gd")
 const ESCALA            = 15.0
 const N_ONIBUS          = 288    # frota real de Santos: 288 ônibus
 const DIST_PARADA_WP    = 300.0  # raio (px) para associar parada ao waypoint mais próximo
-const MIN_WPS           = 6     # rota com menos pontos é ignorada
+const MIN_WPS           = 2     # rota com menos pontos é ignorada
 
 const URL_LINHAS = "https://hericmr.github.io/gta/newdata/linhas_onibus.json"
 
@@ -77,11 +77,33 @@ func _processar_linhas(dados: Dictionary) -> void:
 		_spawnar_todos()
 
 
+const PASSO_INTERPOLACAO = 280.0   # px máximos entre waypoints consecutivos
+
 func _to_wps(pontos: Array) -> PoolVector2Array:
-	var arr = PoolVector2Array()
+	var bruto = PoolVector2Array()
 	for p in pontos:
-		arr.append(Vector2(p[0] * ESCALA, p[1] * ESCALA))
-	return arr
+		bruto.append(Vector2(p[0] * ESCALA, p[1] * ESCALA))
+	return _interpolar(bruto)
+
+
+# Insere waypoints intermediários para que nenhum salto ultrapasse PASSO_INTERPOLACAO.
+# O ônibus ainda vai em linha reta entre pontos GPS, mas em passos curtos,
+# permitindo que o move_and_slide contorne obstáculos gradualmente.
+func _interpolar(wps: PoolVector2Array) -> PoolVector2Array:
+	var result = PoolVector2Array()
+	if wps.size() == 0:
+		return result
+	result.append(wps[0])
+	for i in range(1, wps.size()):
+		var a = wps[i - 1]
+		var b = wps[i]
+		var dist = a.distance_to(b)
+		if dist > PASSO_INTERPOLACAO:
+			var n: int = int(dist / PASSO_INTERPOLACAO)
+			for j in range(1, n + 1):
+				result.append(a.linear_interpolate(b, float(j) / float(n)))
+		result.append(b)
+	return result
 
 
 func _mapear_paradas(wps: PoolVector2Array, paradas: Array) -> Array:

@@ -5,6 +5,13 @@ const DIST_WP  = 12.0
 const FPS_ANIM = 8.0
 const N_FRAMES = 5
 
+# Variação de comportamento individual
+const PAUSA_PROB     = 0.002   # chance/frame de parar (~1 vez/8 s a 60 fps)
+const PAUSA_MIN      = 0.7
+const PAUSA_MAX      = 2.5
+const ESPERA_FIM_MIN = 3.0     # aguarda no destino antes de pedir nova rota
+const ESPERA_FIM_MAX = 8.0
+
 const TEX_WALK   = preload("res://assets/human/player_walk.png")
 const TEX_MORTO  = preload("res://assets/human/SP_1111.png")
 const TEX_SANGUE = preload("res://assets/human/SP_127.png")
@@ -35,6 +42,8 @@ var _morto:       bool   = false
 var _cor_topo:    Color  = Color.white
 var _cor_base:    Color  = Color.white
 var _half_h:      float  = 0.0
+var _pausa_t:     float  = 0.0   # timer de pausa mid-walk
+var _espera_t:    float  = 0.0   # timer de espera no destino
 
 signal chegou_ao_fim
 
@@ -147,13 +156,37 @@ func reinicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 	inicializar(wps, vel, start)
 
 
+func _aplicar_offset_lateral(wps: PoolVector2Array) -> PoolVector2Array:
+	var n = wps.size()
+	if n < 2:
+		return wps
+	var off = rand_range(-26.0, 26.0)
+	var result = PoolVector2Array()
+	for i in range(n):
+		var perp: Vector2
+		if i == 0:
+			perp = (wps[1] - wps[0]).normalized().rotated(PI * 0.5)
+		elif i == n - 1:
+			perp = (wps[i] - wps[i - 1]).normalized().rotated(PI * 0.5)
+		else:
+			var d1 = (wps[i] - wps[i - 1]).normalized()
+			var d2 = (wps[i + 1] - wps[i]).normalized()
+			var m  = d1 + d2
+			perp = (m.normalized() if m.length() > 0.01 else d1).rotated(PI * 0.5)
+		result.append(wps[i] + perp * off)
+	return result
+
+
 func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
-	_wps          = wps
-	_vel          = vel
-	_terminado    = false
-	_frame_atual  = randi() % N_FRAMES
-	_frame_timer  = 0.0
-	_idx = clamp(start, 0, max(0, wps.size() - 1))
+	_wps         = _aplicar_offset_lateral(wps)
+	_vel         = vel
+	_terminado   = false
+	_frame_atual = randi() % N_FRAMES
+	_frame_timer = 0.0
+	_pausa_t     = 0.0
+	_espera_t    = rand_range(ESPERA_FIM_MIN, ESPERA_FIM_MAX)
+	var sz = _wps.size()
+	_idx = start if start < sz else (sz - 1 if sz > 0 else 0)
 	if _idx < _wps.size():
 		position = _wps[_idx]
 
@@ -163,13 +196,24 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if _idx >= _wps.size():
+		# Aguarda brevemente no destino antes de solicitar nova rota
+		if _espera_t > 0.0:
+			_espera_t -= delta
+			if _sprite:     _sprite.frame = 0
+			if _sprite_topo: _sprite_topo.frame = 0
+			return
 		if not _terminado:
 			_terminado = true
 			emit_signal("chegou_ao_fim")
-		if _sprite:
-			_sprite.frame = 0
-		if _sprite_topo:
-			_sprite_topo.frame = 0
+		if _sprite:     _sprite.frame = 0
+		if _sprite_topo: _sprite_topo.frame = 0
+		return
+
+	# Pausa aleatória mid-walk
+	if _pausa_t > 0.0:
+		_pausa_t -= delta
+		if _sprite:     _sprite.frame = 0
+		if _sprite_topo: _sprite_topo.frame = 0
 		return
 
 	var diff = _wps[_idx] - position
@@ -177,6 +221,10 @@ func _physics_process(delta: float) -> void:
 
 	if dist < DIST_WP:
 		_idx += 1
+		return
+
+	if randf() < PAUSA_PROB:
+		_pausa_t = rand_range(PAUSA_MIN, PAUSA_MAX)
 		return
 
 	rotation = atan2(diff.y, diff.x) - PI * 0.5
