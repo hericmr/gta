@@ -84,7 +84,6 @@ func _finalizar():
 	_indexar_predios_2p5d_por_chunk()
 	print("[WorldOSM] %d prédios OSM e %d 2.5D indexados em chunks." % [
 		_dados["predios"].size(), (_dados_2p5d["predios"].size() if _dados_2p5d else 0)])
-	_atualizar_chunks()   # carrega chunks iniciais (pode estar em (-999,-999) ainda)
 
 
 # ── Chunk system ──────────────────────────────────────────────────────────────

@@ -31,6 +31,7 @@ func _ready() -> void:
 	_hud.definir_ref(_player)
 	_traffic.definir_ref(_player)
 	_onibus.definir_ref(_player)
+	_world.atualizar_parallax(_player.position)
 
 func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("roubar"):
