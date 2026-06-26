@@ -43,6 +43,8 @@ var _terminado:   bool  = false
 var _pos_check:   Vector2 = Vector2.ZERO
 var _check_timer: float   = 0.0
 var _stuck_t:     float   = 0.0
+var _fator_cache: float   = 1.0
+var _fator_tick:  int     = 0
 
 signal chegou_ao_fim
 
@@ -124,6 +126,9 @@ func _physics_process(delta: float) -> void:
 # Retorna fator 0..1 baseado na distância ao veículo mais próximo à frente.
 # 1.0 = velocidade total; 0.0 = parado.
 func _fator_proximidade() -> float:
+	_fator_tick = (_fator_tick + 1) % 3
+	if _fator_tick != 0:
+		return _fator_cache
 	var fwd = -transform.y
 	var melhor: float = 1.0
 	for outro in get_tree().get_nodes_in_group("npc_carros"):
@@ -138,4 +143,5 @@ func _fator_proximidade() -> float:
 		var f = (dist - DIST_FRENTE_MIN) / (DIST_FRENTE_MAX - DIST_FRENTE_MIN)
 		if f < melhor:
 			melhor = f
-	return clamp(melhor, 0.0, 1.0)
+	_fator_cache = clamp(melhor, 0.0, 1.0)
+	return _fator_cache

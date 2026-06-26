@@ -257,11 +257,12 @@ func _criar_predio_2p5d_lazy(corpo: StaticBody2D, predio: Dictionary, visuais_li
 	visuais_list.append(visual)
 
 	return {
-		"pool":    pool,
-		"wall_px": wall_px,
-		"centro":  _centroide(pool),
-		"roof":    visual,
-		"quads":   quads,
+		"pool":          pool,
+		"wall_px":       wall_px,
+		"centro":        _centroide(pool),
+		"roof":          visual,
+		"quads":         quads,
+		"ultimo_offset": Vector2.INF,
 	}
 
 
@@ -714,20 +715,20 @@ func atualizar_parallax(pos_jogo: Vector2) -> void:
 		if centro.distance_squared_to(pos_pre) > raio2:
 			continue
 
-		var dir     = (centro - pos_pre).normalized()
-		var wall_px: float          = dados.wall_px
-		var offset                  = dir * wall_px
-		var pool:   PoolVector2Array = dados.pool
+		var dir    = (centro - pos_pre).normalized()
+		var offset = dir * (dados.wall_px as float)
+
+		if dados["ultimo_offset"].distance_squared_to(offset) < 0.25:
+			continue
+		dados["ultimo_offset"] = offset
+
+		# Telhado: desloca o nó sem reconstruir o polygon
+		dados.roof.position = offset
+
+		# Quads base→telhado
+		var pool:  PoolVector2Array = dados.pool
+		var quads: Array            = dados.quads
 		var n                       = pool.size()
-
-		# Atualiza telhado
-		var roof_pts = PoolVector2Array()
-		for v in pool:
-			roof_pts.append(v + offset)
-		dados.roof.polygon = roof_pts
-
-		# Atualiza quads base→telhado
-		var quads: Array = dados.quads
 		for i in range(n):
 			var a = pool[i]
 			var b = pool[(i + 1) % n]

@@ -17,8 +17,11 @@ const RAIO_ATROPELO    = 45.0
 const VEL_ATROPELO_KMH = 70.0
 
 # Batida / câmera
-const FLASH_DURACAO = 0.30
-const SHAKE_DECAY   = 80.0
+const FLASH_DURACAO  = 0.30
+const SHAKE_DECAY    = 80.0
+const LOOK_AHEAD     = 220.0              # px de antecipação máxima
+const LOOK_AHEAD_VEL = 3.5               # suavização (maior = mais rápido)
+const BASE_CAM_LOCAL = Vector2(37.5, 87.5) # posição original da Camera2D no .tscn
 
 # Marcas de pneu
 const MAX_MARCAS     = 30
@@ -38,9 +41,10 @@ var _posicao_salva: float = 0.0
 var _marcas:        Array = []
 var _pneu_esq_ant         = null
 var _pneu_dir_ant         = null
-var _shake_ampl:    float = 0.0
-var _flash_timer:   float = 0.0
-var _col_cooldown:  Dictionary = {}
+var _shake_ampl:       float   = 0.0
+var _flash_timer:      float   = 0.0
+var _look_ahead_offset: Vector2 = Vector2.ZERO
+var _col_cooldown:     Dictionary = {}
 
 onready var _camera: Camera2D          = $Camera2D
 onready var _radio:  AudioStreamPlayer = $Radio
@@ -69,9 +73,9 @@ func _ready() -> void:
 func _set_em_uso(val: bool) -> void:
 	em_uso = val
 	if val:
+		_faixa_atual = randi() % FAIXAS.size()
 		_iniciar_radio()
 	else:
-		_posicao_salva = _radio.get_playback_position() if _radio.playing else _posicao_salva
 		_radio.stop()
 		_loader = null
 
@@ -80,15 +84,22 @@ func _iniciar_radio() -> void:
 	_loader = ResourceLoader.load_interactive(FAIXAS[_faixa_atual])
 
 func _on_radio_finished() -> void:
-	_faixa_atual = (_faixa_atual + 1) % FAIXAS.size()
-	_posicao_salva = 0.0
+	_faixa_atual = _proxima_faixa_aleatoria()
 	_iniciar_radio()
+
+func _proxima_faixa_aleatoria() -> int:
+	if FAIXAS.size() <= 1:
+		return 0
+	var nova = randi() % FAIXAS.size()
+	if nova == _faixa_atual:
+		nova = (nova + 1) % FAIXAS.size()
+	return nova
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not em_uso:
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.scancode == KEY_TAB:
-		_faixa_atual = (_faixa_atual + 1) % FAIXAS.size()
+		_faixa_atual = _proxima_faixa_aleatoria()
 		_iniciar_radio()
 
 func _process(_delta: float) -> void:
@@ -226,6 +237,15 @@ func _physics_process(delta: float) -> void:
 
 	_pneu_esq_ant = pneu_esq
 	_pneu_dir_ant = pneu_dir
+
+	# ── Look-ahead: move a câmera no espaço local do carro ──────────────────
+	# No espaço local, -Y é sempre a frente do carro, independente da rotação.
+	var speed_frac  = clamp(abs(_speed) / max_speed, 0.0, 1.0)
+	var look_target = Vector2.ZERO
+	if abs(_speed) > 50.0:
+		look_target = Vector2(0.0, -LOOK_AHEAD * speed_frac)
+	_look_ahead_offset     = lerp(_look_ahead_offset, look_target, LOOK_AHEAD_VEL * delta)
+	_camera.position = BASE_CAM_LOCAL + _look_ahead_offset
 
 	# ── Camera shake ─────────────────────────────────────────────────────────
 	if _shake_ampl > 0.1:
