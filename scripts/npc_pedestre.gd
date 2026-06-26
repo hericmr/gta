@@ -42,8 +42,9 @@ var _morto:       bool   = false
 var _cor_topo:    Color  = Color.white
 var _cor_base:    Color  = Color.white
 var _half_h:      float  = 0.0
-var _pausa_t:     float  = 0.0   # timer de pausa mid-walk
-var _espera_t:    float  = 0.0   # timer de espera no destino
+var _pausa_t:          float  = 0.0
+var _espera_t:         float  = 0.0
+var _esperando_onibus: bool   = false
 
 signal chegou_ao_fim
 
@@ -191,7 +192,17 @@ func _aplicar_offset_lateral(wps: PoolVector2Array) -> PoolVector2Array:
 	return result
 
 
+func caminhar_para(destino: Vector2) -> void:
+	_esperando_onibus = false
+	_wps       = PoolVector2Array([destino])
+	_idx       = 0
+	_terminado = false
+	_espera_t  = 0.0
+	_pausa_t   = 0.0
+
+
 func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
+	_esperando_onibus = false
 	_wps         = _aplicar_offset_lateral(wps)
 	_vel         = vel
 	_terminado   = false

@@ -7,6 +7,7 @@ const DIST_ENTRAR = 120.0  # pixels para detectar carro próximo
 var _stream    = null
 var _no_carro  = false
 var _debug_t   = 0.0
+var _rua_t     = 0.0
 
 onready var _car      = $Car
 onready var _player   = $Player
@@ -61,6 +62,11 @@ func _process(delta: float) -> void:
 
 	if _mapa.visible:
 		_mapa.atualizar(ref.position, _stream)
+
+	_rua_t += delta
+	if _rua_t >= 1.5:
+		_rua_t = 0.0
+		_hud.atualizar_rua(_world.rua_proxima(ref.position))
 
 	if OS.is_debug_build() and _stream != null:
 		_debug_t += delta

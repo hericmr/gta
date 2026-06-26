@@ -14,7 +14,8 @@ const ESPERA_PARADA_MIN = 3.0
 const ESPERA_PARADA_MAX = 6.0
 
 # Embarque / desembarque
-const RAIO_EMBARQUE    = 180.0   # raio para capturar pedestres na parada (px)
+const RAIO_EMBARQUE    = 180.0   # raio para embarcar pedestres
+const RAIO_CHAMADA     = 500.0   # raio para chamar pedestres esperando no ponto
 const MAX_PASSAGEIROS  = 30      # lotação máxima
 const PROB_EMBARQUE    = 0.65    # chance de um pedestre próximo embarcar
 const PROB_DESEMBARQUE = 0.45    # chance de desembarcar em cada parada
@@ -170,8 +171,8 @@ func _tick_freando(delta: float) -> void:
 		_speed      = 0.0
 		_estado     = Estado.PARADO_PONTO
 		_wait_timer = lerp(ESPERA_PARADA_MIN, ESPERA_PARADA_MAX, randf())
-		print("[Onibus] parada wp=%d  passageiros=%d  pos=%s" % [_idx, _passageiros.size(), position])
 		_desembarcar()
+		_chamar_pedestres()
 
 
 func _tick_parado(delta: float) -> void:
@@ -186,6 +187,17 @@ func _tick_parado(delta: float) -> void:
 
 
 # ── Embarque ─────────────────────────────────────────────────────────────────
+
+func _chamar_pedestres() -> void:
+	for ped in get_tree().get_nodes_in_group("pedestres"):
+		if not is_instance_valid(ped) or ped.get("_morto"):
+			continue
+		if not ped.get("_esperando_onibus"):
+			continue
+		if position.distance_to(ped.position) > RAIO_CHAMADA:
+			continue
+		ped.caminhar_para(position)
+
 
 func _embarcar() -> void:
 	var antes = _passageiros.size()

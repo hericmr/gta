@@ -19,6 +19,7 @@ onready var _label:       Label  = $Control/LabelVel
 onready var _label_debug: Label  = $Control/LabelDebug
 onready var _label_score: Label  = $Control/LabelScore
 onready var _label_combo: Label  = $Control/LabelCombo
+onready var _label_rua:   Label  = $Control/LabelRua
 onready var _tween:       Tween  = $Tween
 
 var _pos_anterior:    Vector2 = Vector2.ZERO
@@ -27,7 +28,9 @@ var _ref_node                 = null
 var _pontuacao:       int   = 0
 var _combo:           int   = 0
 var _combo_timer:     float = 0.0
-var _combo_pos_base:  float = 0.0   # Y base do label de combo
+var _combo_pos_base:  float = 0.0
+var _rua_atual:       String = ""
+var _rua_fade_t:      float  = 0.0
 
 
 func _ready() -> void:
@@ -38,6 +41,15 @@ func _ready() -> void:
 
 func atualizar_velocidade(kmh: float) -> void:
 	_label.text = "%d km/h" % int(kmh)
+
+
+func atualizar_rua(nome: String) -> void:
+	if nome == "" or nome == _rua_atual:
+		return
+	_rua_atual          = nome
+	_label_rua.text     = nome
+	_label_rua.modulate = Color(1, 1, 1, 1)
+	_rua_fade_t         = 4.0
 
 
 func definir_ref(no) -> void:
@@ -70,6 +82,10 @@ func registrar_atropelamento() -> void:
 
 
 func _process(delta: float) -> void:
+	if _rua_fade_t > 0.0:
+		_rua_fade_t -= delta
+		_label_rua.modulate.a = clamp(_rua_fade_t, 0.0, 1.0)
+
 	# Combo timeout
 	if _combo > 0:
 		_combo_timer -= delta

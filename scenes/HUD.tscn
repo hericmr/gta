@@ -50,3 +50,16 @@ margin_bottom = 160.0
 align = 1
 modulate = Color( 1, 1, 1, 0 )
 text = ""
+
+[node name="LabelRua" type="Label" parent="Control"]
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_top = 1.0
+anchor_bottom = 1.0
+margin_left = -300.0
+margin_top = -120.0
+margin_right = 300.0
+margin_bottom = -84.0
+align = 1
+modulate = Color( 1, 1, 1, 0 )
+text = ""

@@ -61,3 +61,7 @@ virar_direita={
 
 pointing/emulate_touch_from_mouse=true
 pointing/emulate_mouse_from_touch=false
+
+[rendering]
+
+quality/2d/use_pixel_snap=true

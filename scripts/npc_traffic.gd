@@ -269,8 +269,8 @@ func _on_fim_carro(carro) -> void:
 func _on_fim_ped(ped) -> void:
 	if not is_instance_valid(ped):
 		return
-	# Se chegou perto de uma parada, fica esperando o ônibus
 	if not _paradas_onibus.empty() and _perto_de_parada(ped.position, 230.0):
+		ped._esperando_onibus = true
 		return
 	_on_fim_npc(ped, _ruas_ped, _grafo_ped, _ped_wps, _ped_ow, VEL_PED_MIN, VEL_PED_MAX)
 

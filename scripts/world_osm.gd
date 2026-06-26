@@ -30,6 +30,7 @@ var _dados        = null   # santos.json
 var _dados_2p5d   = null   # santos_predios_godot.json
 var _corpo_global = null   # StaticBody2D de fallback (não usada para prédios lazy)
 var _predios_dinamicos: Array = []  # [{pool, wall_px, centro, roof, quads}] carregados
+var _ruas_nomeadas:     Array = []  # [{nome, pts: PoolVector2Array}]
 
 # Chunk system
 var _predios_chunk:      Dictionary = {}  # "cx_cy" → Array de dados OSM
@@ -79,9 +80,9 @@ func _finalizar():
 	_criar_ruas_visual()
 	_corpo_global = StaticBody2D.new()
 	add_child(_corpo_global)
-	# Indexa prédios em chunks; carregamento acontece via atualizar_parallax()
 	_indexar_predios_por_chunk()
 	_indexar_predios_2p5d_por_chunk()
+	_indexar_ruas_nomeadas()
 	print("[WorldOSM] %d prédios OSM e %d 2.5D indexados em chunks." % [
 		_dados["predios"].size(), (_dados_2p5d["predios"].size() if _dados_2p5d else 0)])
 
@@ -590,7 +591,7 @@ func _criar_predio_2p5d(predio: Dictionary) -> void:
 func _tex_repetida(src: Texture) -> ImageTexture:
 	var img = src.get_data()
 	var tex = ImageTexture.new()
-	tex.create_from_image(img, Texture.FLAG_REPEAT | Texture.FLAG_FILTER)
+	tex.create_from_image(img, Texture.FLAG_REPEAT)
 	return tex
 
 
@@ -688,6 +689,32 @@ func _criar_features(dados: Dictionary) -> void:
 		len(dados.get("verde",  [])),
 		len(dados.get("agua",   [])),
 		len(dados.get("canais", []))])
+
+
+func _indexar_ruas_nomeadas() -> void:
+	for rua in _dados["ruas"]:
+		var nome: String = rua.get("nome", "")
+		if nome == "":
+			continue
+		var pts = PoolVector2Array()
+		for p in rua["pontos"]:
+			pts.append(Vector2(p[0], p[1]))
+		_ruas_nomeadas.append({"nome": nome, "pts": pts})
+
+
+func rua_proxima(pos_jogo: Vector2) -> String:
+	if _ruas_nomeadas.empty():
+		return ""
+	var pos_pre   = pos_jogo / ESCALA
+	var melhor    = ""
+	var melhor_d2 = 350.0 * 350.0
+	for r in _ruas_nomeadas:
+		for pt in r["pts"]:
+			var d2 = pt.distance_squared_to(pos_pre)
+			if d2 < melhor_d2:
+				melhor_d2 = d2
+				melhor    = r["nome"]
+	return melhor
 
 
 func _centroide(pool: PoolVector2Array) -> Vector2:
