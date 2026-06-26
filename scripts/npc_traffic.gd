@@ -28,9 +28,9 @@ const RAIO_DESPAWN = 7500.0
 const MIN_PTS      = 4
 
 # Grafo de conectividade
-const RAIO_CONEXAO  = 60.0   # px — distância máxima entre endpoints para pré-conectar ruas
-const GRADE_CONEXAO = 250.0  # px — célula da grade auxiliar usada na construção do grafo
-const SNAP_VIZIN    = 2      # células ±N toleradas na busca de saídas em tempo real
+const RAIO_CONEXAO  = 150.0  # px — distância máxima entre endpoints para pré-conectar ruas
+const GRADE_CONEXAO = 300.0  # px — célula da grade auxiliar usada na construção do grafo
+const SNAP_VIZIN    = 4      # células ±N toleradas na busca de saídas em tempo real
 
 var _ruas_carro:  Array      = []
 var _ruas_ped:    Array      = []
@@ -255,10 +255,7 @@ func _resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect) -> void:
 	if info.empty():
 		return
 	var vel = lerp(v_min, v_max, randf())
-	if npc.has_method("reinicializar"):
-		npc.reinicializar(info.wps, vel, info.start)
-	else:
-		npc.inicializar(info.wps, vel, info.start)
+	npc.inicializar(info.wps, vel, info.start)
 	wps_dict[npc] = info.wps
 	ow_dict[npc]  = info.oneway
 
@@ -295,29 +292,20 @@ func _on_fim_npc(npc, ruas, grafo, wps_dict, ow_dict, v_min, v_max) -> void:
 			if candidatas.empty():
 				candidatas = saidas
 			var proxima = candidatas[randi() % candidatas.size()]
-			npc.inicializar(proxima["wps"], vel, 0)
+			npc.reinicializar(proxima["wps"], vel)
 			wps_dict[npc] = proxima["wps"]
 			ow_dict[npc]  = proxima["oneway"]
 			return
 
-	# ── Grafo falhou: tenta rua próxima antes de inverter ────────────────────
+	# ── Grafo falhou: inverte a rota atual e continua sem teletransportar ────
 	var rect = _rect_visivel()
-	if rect.has_point(npc.position):
-		var rua_prox = _rua_mais_proxima(ruas, npc.position, 2500.0)
-		if not rua_prox.empty():
-			var wps_prox: PoolVector2Array = rua_prox["wps"]
-			if not rua_prox["oneway"] and randi() % 2 == 0:
-				wps_prox = _inverter(wps_prox)
-			npc.inicializar(wps_prox, vel, 0)
-			wps_dict[npc] = wps_prox
-			ow_dict[npc]  = rua_prox["oneway"]
-			return
-		# Último recurso: inverte (mão dupla apenas)
-		if not ow_dict.get(npc, false) and wps_atual.size() > 0:
-			var inv = _inverter(wps_atual)
-			npc.inicializar(inv, vel, 0)
-			wps_dict[npc] = inv
-	else:
+	if wps_atual.size() > 1 and not ow_dict.get(npc, false):
+		var inv = _inverter(wps_atual)
+		npc.inicializar(inv, vel, 0)
+		wps_dict[npc] = inv
+		return
+	# Carro fora de câmera e sem rota: reposiciona fora da tela
+	if not rect.has_point(npc.position):
 		_resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect)
 
 

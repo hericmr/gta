@@ -35,7 +35,7 @@ func _ready() -> void:
 	_world.atualizar_parallax(_player.position)
 
 func _process(delta: float) -> void:
-	if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("roubar"):
+	if Input.is_action_just_pressed("entrar_carro") or Input.is_action_just_pressed("roubar"):
 		if _no_carro:
 			_sair_do_carro()
 		else:

@@ -4,30 +4,35 @@
 [ext_resource path="res://assets/carros/SP_021.png" type="Texture" id=2]
 
 [sub_resource type="RectangleShape2D" id=1]
-extents = Vector2( 41.25, 70 )
+extents = Vector2( 32, 61 )
 
 [node name="Car" type="KinematicBody2D"]
 position = Vector2( -37.5, -90 )
 z_index = 5
 script = ExtResource( 1 )
+max_speed_re = 900.0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-position = Vector2( 36.25, 87.5 )
+position = Vector2( 37.5, 82.225 )
+scale = Vector2( 0.949, 0.949 )
 shape = SubResource( 1 )
 
 [node name="Visual" type="Polygon2D" parent="."]
-position = Vector2( 87.715, 167.5 )
+position = Vector2( 73.5, 150 )
 rotation = 3.14159
-scale = Vector2( 2.86, 2.36 )
-color = Color( 0.8, 0.643137, 0.717647, 1 )
+scale = Vector2( 2.03719, 1.94363 )
+color = Color( 0.992157, 1, 0, 1 )
 texture = ExtResource( 2 )
+texture_scale = Vector2( 1.021, 1.021 )
 polygon = PoolVector2Array( 1.75597, 60.375, 1.756, 45.2813, 1.75601, 38.8125, 1.75603, 30.1875, 0.878004, 20.4844, 2.63412, 9.70313, 4.39023, 4.31251, 7.02438, 2.15627, 9.65853, 3.05176e-05, 17.561, 1.07818, 24.5853, 1.0782, 31.6097, 3.23447, 35.122, 15.0937, 34.2438, 23.7189, 33.3657, 38.8126, 33.3657, 42.047, 33.3657, 47.4376, 34.2437, 57.1407, 29.8535, 65.7657, 9.65839, 65.7657 )
 
 [node name="Radio" type="AudioStreamPlayer" parent="."]
 volume_db = 8.0
 
 [node name="Camera2D" type="Camera2D" parent="."]
-position = Vector2( 37.5, 87.5 )
+position = Vector2( 53.5, -24 )
+offset = Vector2( 0, -3.86 )
 current = true
-smoothing_enabled = true
+zoom = Vector2( 0.7, 0.7 )
+limit_left = -10002128
 smoothing_speed = 6.0

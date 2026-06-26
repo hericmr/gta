@@ -7,13 +7,13 @@ const DIST_WP   = 50.0
 const TEX_CARRO = preload("res://assets/carros/SP_021.png")
 
 # Detecção de veículo à frente
-const DIST_FRENTE_MAX = 220.0   # começa a desacelerar a esta distância
-const DIST_FRENTE_MIN = 70.0    # distância mínima (abaixo = para)
-const CONE_FRENTE     = 0.65    # cos(~49°) — ângulo do cone de detecção
+const DIST_FRENTE_MAX = 160.0   # começa a desacelerar a esta distância
+const DIST_FRENTE_MIN = 60.0    # distância mínima (abaixo = para)
+const CONE_FRENTE     = 0.92    # cos(~23°) — cone estreito: ignora cruzamentos
 
 # Despawn por travamento: se mover < STUCK_DIST2 px em STUCK_TEMPO s → despawn
 const STUCK_DIST2  = 150.0   # px mínimos em STUCK_TEMPO segundos
-const STUCK_TEMPO  = 3.5     # intervalo de verificação (segundos)
+const STUCK_TEMPO  = 2.0     # intervalo de verificação (segundos)
 
 const CORES = [
 	Color(0.80, 0.20, 0.20), Color(0.20, 0.42, 0.85),
@@ -55,17 +55,17 @@ func _ready() -> void:
 	var v = Polygon2D.new()
 	v.texture  = TEX_CARRO
 	v.polygon  = POLIGONO
-	v.position = Vector2(87.715, 167.5)
+	v.position = Vector2(73.5, 150.0)
 	v.rotation = PI
-	v.scale    = Vector2(2.86, 2.36)
+	v.scale    = Vector2(2.037, 1.944)
 	v.color    = CORES[randi() % CORES.size()]
 	add_child(v)
 
 	var shape = RectangleShape2D.new()
-	shape.extents = Vector2(41.25, 70.0)
+	shape.extents = Vector2(30.0, 58.0)
 	var col = CollisionShape2D.new()
 	col.shape    = shape
-	col.position = Vector2(36.25, 87.5)
+	col.position = Vector2(37.5, 82.0)
 	add_child(col)
 
 	collision_layer = 2
@@ -89,8 +89,28 @@ func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 			rotation = atan2(dir.y, dir.x) + PI * 0.5
 
 
+# Troca de rota sem teletransportar — usado pelo grafo na continuação
+func reinicializar(wps: PoolVector2Array, vel: float) -> void:
+	_wps         = wps
+	_vel         = vel
+	_terminado   = false
+	_stuck_t     = 0.0
+	_check_timer = 0.0
+	_pos_check   = position
+	# Encontra o waypoint mais próximo na nova rua
+	_idx = 0
+	var melhor_d = INF
+	for i in range(wps.size()):
+		var d = position.distance_squared_to(wps[i])
+		if d < melhor_d:
+			melhor_d = d
+			_idx = i
+	# Avança além dos waypoints já ultrapassados
+	while _idx < _wps.size() - 1 and position.distance_to(_wps[_idx]) < DIST_WP:
+		_idx += 1
+
+
 func receber_impacto(impulso: Vector2) -> void:
-	# Chamado pelo carro do player ao colidir
 	pass
 
 
@@ -113,12 +133,15 @@ func _physics_process(delta: float) -> void:
 	var fator = _fator_proximidade()
 	move_and_slide(-transform.y * _vel * fator)
 
-	# ── Despawn por travamento (amostra a cada STUCK_TEMPO segundos) ─────────
+	# ── Detecção de travamento (amostra a cada STUCK_TEMPO segundos) ─────────
 	_check_timer += delta
 	if _check_timer >= STUCK_TEMPO:
 		if position.distance_to(_pos_check) < STUCK_DIST2:
-			_terminado = true
-			emit_signal("chegou_ao_fim")
+			# Pula 3 waypoints antes de desistir
+			_idx = min(_idx + 3, _wps.size())
+			if _idx >= _wps.size():
+				_terminado = true
+				emit_signal("chegou_ao_fim")
 		_pos_check   = position
 		_check_timer = 0.0
 

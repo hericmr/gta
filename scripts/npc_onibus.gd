@@ -2,7 +2,7 @@
 extends KinematicBody2D
 
 # Física do ônibus: mais lento, aceleração/frenagem suaves, maior inércia
-const MAX_SPEED       = 560.0
+const MAX_SPEED       = 1060.0
 const ENGINE_POWER    = 140.0
 const BRAKING_POWER   = 110.0
 
