@@ -23,11 +23,14 @@ const LOOK_AHEAD     = 220.0              # px de antecipação máxima
 const LOOK_AHEAD_VEL = 3.5               # suavização (maior = mais rápido)
 const BASE_CAM_LOCAL = Vector2(37.5, 87.5) # posição original da Camera2D no .tscn
 
-# Marcas de pneu
-const MAX_MARCAS     = 30
-const LIMIAR_DERRAPA = 0.28          # |sin(ângulo heading×vel)| ≈ 16°
-const PNEU_ESQ_LOCAL = Vector2(10,  150)
-const PNEU_DIR_LOCAL = Vector2(62,  150)
+# Marcas de pneu / derrapagem
+const MAX_MARCAS      = 30
+const LIMIAR_DERRAPA  = 80.0         # velocidade lateral mínima (px/s) para marca de pneu
+const GRIP_NORMAL     = 0.88         # fricção lateral sem derrapar (por frame a 60 fps)
+const GRIP_DRIFT      = 0.74         # fricção lateral em derrapagem
+const DRIFT_STEER_MIN = 0.45         # fração do esterço máximo que ativa derrapagem
+const PNEU_ESQ_LOCAL  = Vector2(10,  150)
+const PNEU_DIR_LOCAL  = Vector2(62,  150)
 
 var em_uso: bool = false setget _set_em_uso
 
@@ -41,10 +44,11 @@ var _posicao_salva: float = 0.0
 var _marcas:        Array = []
 var _pneu_esq_ant         = null
 var _pneu_dir_ant         = null
-var _shake_ampl:       float   = 0.0
-var _flash_timer:      float   = 0.0
+var _shake_ampl:        float   = 0.0
+var _flash_timer:       float   = 0.0
 var _look_ahead_offset: Vector2 = Vector2.ZERO
-var _col_cooldown:     Dictionary = {}
+var _lat_vel:           Vector2 = Vector2.ZERO   # velocidade lateral (componente de deriva)
+var _col_cooldown:      Dictionary = {}
 
 onready var _camera: Camera2D          = $Camera2D
 onready var _radio:  AudioStreamPlayer = $Radio
@@ -148,9 +152,10 @@ func _get_input(delta: float) -> void:
 func _calculate_steering(delta: float) -> void:
 	if abs(_speed) < 1.0:
 		_velocity = Vector2.ZERO
+		_lat_vel  = Vector2.ZERO
 		return
 
-	var fwd         = -transform.y * _speed          # vetor de deslocamento
+	var fwd         = -transform.y * _speed
 	var rear_wheel  = position + transform.y * (wheel_base / 2.0)
 	var front_wheel = position - transform.y * (wheel_base / 2.0)
 	rear_wheel  += fwd * delta
@@ -160,8 +165,8 @@ func _calculate_steering(delta: float) -> void:
 	if new_heading == Vector2.ZERO:
 		return
 
-	rotation  = atan2(new_heading.y, new_heading.x) + PI / 2.0
-	_velocity = new_heading * _speed
+	# Só atualiza a rotação; a velocidade é tratada pelo modelo de fricção lateral.
+	rotation = atan2(new_heading.y, new_heading.x) + PI / 2.0
 
 
 # ── Loop principal ───────────────────────────────────────────────────────────
@@ -177,6 +182,22 @@ func _physics_process(delta: float) -> void:
 
 	_get_input(delta)
 	_calculate_steering(delta)
+
+	# ── Fricção lateral / derrapagem ─────────────────────────────────────────
+	# Decompõe velocidade em longitudinal (ao longo do carro) e lateral (deriva).
+	# A componente longitudinal é sempre o alvo do motor (_speed).
+	# A lateral decai por fricção — mais devagar ao derrapar, criando o slide.
+	var heading    = -transform.y
+	var lon        = _velocity.dot(heading)
+	_lat_vel       = _velocity - heading * lon
+
+	var speed_frac = clamp(abs(_speed) / max_speed, 0.0, 1.0)
+	var steer_frac = clamp(abs(_steer_angle) / deg2rad(steering_angle), 0.0, 1.0)
+	var drifting   = speed_frac > 0.35 and steer_frac > DRIFT_STEER_MIN
+
+	var grip  = GRIP_DRIFT if drifting else GRIP_NORMAL
+	_lat_vel *= pow(grip, delta * 60.0)   # frame-rate independent
+	_velocity = heading * _speed + _lat_vel
 
 	_velocity = move_and_slide(_velocity)
 
@@ -226,10 +247,7 @@ func _physics_process(delta: float) -> void:
 	# ── Marcas de pneu ───────────────────────────────────────────────────────
 	var pneu_esq = to_global(PNEU_ESQ_LOCAL)
 	var pneu_dir = to_global(PNEU_DIR_LOCAL)
-	var derrapa  = false
-	if abs(_speed) > 100.0 and _velocity.length() > 10.0:
-		var heading = -transform.y
-		derrapa = abs(heading.cross(_velocity.normalized())) > LIMIAR_DERRAPA
+	var derrapa  = _lat_vel.length() > LIMIAR_DERRAPA and abs(_speed) > 100.0
 
 	if _pneu_esq_ant != null and derrapa:
 		_adicionar_marca(_pneu_esq_ant, pneu_esq)
@@ -239,11 +257,10 @@ func _physics_process(delta: float) -> void:
 	_pneu_dir_ant = pneu_dir
 
 	# ── Look-ahead: move a câmera no espaço local do carro ──────────────────
-	# No espaço local, -Y é sempre a frente do carro, independente da rotação.
-	var speed_frac  = clamp(abs(_speed) / max_speed, 0.0, 1.0)
+	var look_frac   = clamp(abs(_speed) / max_speed, 0.0, 1.0)
 	var look_target = Vector2.ZERO
 	if abs(_speed) > 50.0:
-		look_target = Vector2(0.0, -LOOK_AHEAD * speed_frac)
+		look_target = Vector2(0.0, -LOOK_AHEAD * look_frac)
 	_look_ahead_offset     = lerp(_look_ahead_offset, look_target, LOOK_AHEAD_VEL * delta)
 	_camera.position = BASE_CAM_LOCAL + _look_ahead_offset
 
