@@ -1,9 +1,9 @@
 # car.gd — Física arcade top-down (Godot 3)
 extends KinematicBody2D
 
-export var wheel_base:     float = 65.0
+export var wheel_base:     float = 95.0
 export var steering_angle: float = 25.0   # ângulo máximo das rodas (°)
-export var engine_power:   float = 900.0
+export var engine_power:   float = 800.0
 export var braking:        float = 450.0
 export var friction:       float = -49.0
 export var drag:           float = -0.01

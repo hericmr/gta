@@ -35,4 +35,4 @@ offset = Vector2( 0, -3.86 )
 current = true
 zoom = Vector2( 2.203, 2.203 )
 smoothing_enabled = true
-smoothing_speed = 3.646
+smoothing_speed = 1.312
