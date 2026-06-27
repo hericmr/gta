@@ -7,20 +7,20 @@
 extents = Vector2( 32, 61 )
 
 [node name="Car" type="KinematicBody2D"]
-position = Vector2( -37.5, -90 )
+position = Vector2( -38, -90 )
 z_index = 5
 script = ExtResource( 1 )
 max_speed_re = 900.0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-position = Vector2( 37.5, 82.225 )
+position = Vector2( 37.5, 90 )
 scale = Vector2( 0.949, 0.949 )
 shape = SubResource( 1 )
 
 [node name="Visual" type="Polygon2D" parent="."]
-position = Vector2( 73.5, 150 )
+position = Vector2( 72.8836, 151.584 )
 rotation = 3.14159
-scale = Vector2( 2.03719, 1.94363 )
+scale = Vector2( 2.00625, 1.86308 )
 color = Color( 0.992157, 1, 0, 1 )
 texture = ExtResource( 2 )
 texture_scale = Vector2( 1.021, 1.021 )
@@ -30,9 +30,9 @@ polygon = PoolVector2Array( 1.75597, 60.375, 1.756, 45.2813, 1.75601, 38.8125, 1
 volume_db = 8.0
 
 [node name="Camera2D" type="Camera2D" parent="."]
-position = Vector2( 53.5, -24 )
+position = Vector2( 37, 92 )
 offset = Vector2( 0, -3.86 )
 current = true
-zoom = Vector2( 0.7, 0.7 )
-limit_left = -10002128
-smoothing_speed = 6.0
+zoom = Vector2( 2.203, 2.203 )
+smoothing_enabled = true
+smoothing_speed = 3.646
