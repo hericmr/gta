@@ -17,6 +17,16 @@ position = Vector2( 37.5, 90 )
 scale = Vector2( 0.949, 0.949 )
 shape = SubResource( 1 )
 
+[node name="Sombra" type="Polygon2D" parent="."]
+position = Vector2( 76.8836, 155.584 )
+rotation = 3.14159
+scale = Vector2( 2.00625, 1.86308 )
+z_index = -1
+color = Color( 0, 0, 0, 0.4 )
+texture = ExtResource( 2 )
+texture_scale = Vector2( 1.021, 1.021 )
+polygon = PoolVector2Array( 1.75597, 60.375, 1.756, 45.2813, 1.75601, 38.8125, 1.75603, 30.1875, 0.878004, 20.4844, 2.63412, 9.70313, 4.39023, 4.31251, 7.02438, 2.15627, 9.65853, 3.05176e-05, 17.561, 1.07818, 24.5853, 1.0782, 31.6097, 3.23447, 35.122, 15.0937, 34.2438, 23.7189, 33.3657, 38.8126, 33.3657, 42.047, 33.3657, 47.4376, 34.2437, 57.1407, 29.8535, 65.7657, 9.65839, 65.7657 )
+
 [node name="Visual" type="Polygon2D" parent="."]
 position = Vector2( 72.8836, 151.584 )
 rotation = 3.14159
@@ -35,4 +45,4 @@ offset = Vector2( 0, -3.86 )
 current = true
 zoom = Vector2( 2.203, 2.203 )
 smoothing_enabled = true
-smoothing_speed = 2.2
+smoothing_speed = 2.708

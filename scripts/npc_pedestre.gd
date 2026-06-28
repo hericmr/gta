@@ -38,6 +38,7 @@ var _frame_timer: float  = 0.0
 var _frame_atual: int    = 0
 var _sprite:      Sprite = null
 var _sprite_topo: Sprite = null
+var _sombra:      Sprite = null
 var _morto:       bool   = false
 var _cor_topo:    Color  = Color.white
 var _cor_base:    Color  = Color.white
@@ -93,6 +94,16 @@ func _ready() -> void:
 func _criar_sprites() -> void:
 	var tex_w = TEX_WALK.get_size().x
 
+	# Sombra — silhueta escura do personagem inteiro
+	_sombra          = Sprite.new()
+	_sombra.texture  = TEX_WALK
+	_sombra.hframes  = N_FRAMES
+	_sombra.scale    = Vector2(2.08, 1.85)
+	_sombra.position = Vector2(4.0, 2.0)
+	_sombra.modulate = Color(0, 0, 0, 0.4)
+	_sombra.z_index  = -1
+	add_child(_sombra)
+
 	# Parte inferior (calça) — metade de baixo da textura
 	_sprite = Sprite.new()
 	_sprite.texture        = TEX_WALK
@@ -130,8 +141,8 @@ func atropelar() -> void:
 	_terminado = true
 	collision_layer = 0
 	collision_mask  = 0
-	if _sprite_topo:
-		_sprite_topo.visible = false
+	if _sombra:      _sombra.visible      = false
+	if _sprite_topo: _sprite_topo.visible = false
 	if _sprite:
 		_sprite.region_enabled = false
 		_sprite.texture  = TEX_MORTO
@@ -184,6 +195,7 @@ func reinicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 	collision_layer = 8
 	collision_mask  = 1
 	z_index = 0
+	if _sombra:      _sombra.visible      = true
 	if _sprite:
 		_sprite.region_enabled = true
 		_sprite.texture        = TEX_WALK
@@ -270,13 +282,16 @@ func _physics_process(delta: float) -> void:
 					_frame_atual = (_frame_atual + 1) % N_FRAMES
 					if _sprite: _sprite.frame = _frame_atual
 					if _sprite_topo: _sprite_topo.frame = _frame_atual
+					if _sombra: _sombra.frame = _frame_atual
 			else:
 				if _sprite: _sprite.frame = 0
 				if _sprite_topo: _sprite_topo.frame = 0
+				if _sombra: _sombra.frame = 0
 				_desvio_idle = Vector2.ZERO
 		else:
 			if _sprite: _sprite.frame = 0
 			if _sprite_topo: _sprite_topo.frame = 0
+			if _sombra: _sombra.frame = 0
 		return
 
 	if _idx >= _wps.size():
@@ -285,12 +300,14 @@ func _physics_process(delta: float) -> void:
 			_espera_t -= delta
 			if _sprite:     _sprite.frame = 0
 			if _sprite_topo: _sprite_topo.frame = 0
+			if _sombra:     _sombra.frame = 0
 			return
 		if not _terminado:
 			_terminado = true
 			emit_signal("chegou_ao_fim")
 		if _sprite:     _sprite.frame = 0
 		if _sprite_topo: _sprite_topo.frame = 0
+		if _sombra:     _sombra.frame = 0
 		return
 
 	# Pausa aleatória mid-walk
@@ -298,6 +315,7 @@ func _physics_process(delta: float) -> void:
 		_pausa_t -= delta
 		if _sprite:     _sprite.frame = 0
 		if _sprite_topo: _sprite_topo.frame = 0
+		if _sombra:     _sombra.frame = 0
 		return
 
 	var diff = _wps[_idx] - position
@@ -318,10 +336,9 @@ func _physics_process(delta: float) -> void:
 	if _frame_timer >= 1.0 / FPS_ANIM:
 		_frame_timer -= 1.0 / FPS_ANIM
 		_frame_atual  = (_frame_atual + 1) % N_FRAMES
-		if _sprite:
-			_sprite.frame = _frame_atual
-		if _sprite_topo:
-			_sprite_topo.frame = _frame_atual
+		if _sprite:      _sprite.frame      = _frame_atual
+		if _sprite_topo: _sprite_topo.frame = _frame_atual
+		if _sombra:      _sombra.frame      = _frame_atual
 
 
 func _tocar_som_morte() -> void:

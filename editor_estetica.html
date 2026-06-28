@@ -16,6 +16,7 @@
   --muted:   #666;
   --green:   #4fc;
   --red:     #f54;
+  --blue:    #4cf;
 }
 
 body {
@@ -39,7 +40,8 @@ canvas {
   cursor: grab;
   background: #111;
 }
-canvas.panning { cursor: grabbing; }
+canvas.panning   { cursor: grabbing; }
+canvas.selecting { cursor: crosshair; }
 
 #coords {
   position: absolute;
@@ -121,26 +123,13 @@ canvas.panning { cursor: grabbing; }
   padding: 5px 0;
   border-bottom: 1px solid #1a1a1a;
 }
-.cat-label {
-  font-size: 11px;
-  color: var(--text);
-  white-space: nowrap;
-}
-.cat-sub {
-  font-size: 9px;
-  color: var(--muted);
-  display: block;
-  margin-top: 1px;
-}
+.cat-label { font-size: 11px; color: var(--text); white-space: nowrap; }
+.cat-sub   { font-size: 9px;  color: var(--muted); display: block; margin-top: 1px; }
 
 .color-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 3px;
-  border: 1px solid #444;
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
+  width: 24px; height: 24px;
+  border-radius: 3px; border: 1px solid #444;
+  cursor: pointer; padding: 0; flex-shrink: 0;
 }
 .color-btn:hover { border-color: #888; }
 
@@ -148,116 +137,79 @@ input[type="color"] {
   width: 0; height: 0; opacity: 0; position: absolute; pointer-events: none;
 }
 
-/* slider de largura */
-.slider-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.slider-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-.slider-row label {
-  color: var(--muted);
-  font-size: 10px;
-  min-width: 52px;
-}
-.slider-row span {
-  color: var(--green);
-  font-size: 10px;
-  min-width: 32px;
-  text-align: right;
-}
-input[type=range] {
-  flex: 1;
-  accent-color: var(--accent);
-  height: 2px;
-}
+.slider-wrap { display: flex; flex-direction: column; gap: 3px; }
+.slider-row  { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.slider-row label { color: var(--muted); font-size: 10px; min-width: 52px; }
+.slider-row span  { color: var(--green); font-size: 10px; min-width: 32px; text-align: right; }
+input[type=range] { flex: 1; accent-color: var(--accent); height: 2px; }
 
 /* ── Visibilidade ────────────────────────────────────────── */
-.check-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
+.check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .check-label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--text);
-  user-select: none;
+  display: flex; align-items: center; gap: 5px;
+  cursor: pointer; font-size: 11px; color: var(--text); user-select: none;
 }
 .check-label input { accent-color: var(--accent); }
 
 /* ── Fundo ───────────────────────────────────────────────── */
-.row2 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-}
+.row2 { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; }
 .row2 label { color: var(--muted); }
 
 /* ── Botões ──────────────────────────────────────────────── */
 .btn {
-  background: #0d2a10;
-  border: 1px solid var(--green);
-  color: var(--green);
-  padding: 6px 10px;
-  cursor: pointer;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 10px;
-  width: 100%;
-  text-align: center;
+  background: #0d2a10; border: 1px solid var(--green); color: var(--green);
+  padding: 6px 10px; cursor: pointer; border-radius: 4px;
+  font-family: monospace; font-size: 10px; width: 100%; text-align: center;
   transition: background 0.15s;
 }
 .btn:hover { background: #1a4a20; }
-.btn.secondary {
-  background: #1a1200;
-  border-color: var(--accent);
-  color: var(--accent);
-}
+.btn.secondary { background: #1a1200; border-color: var(--accent); color: var(--accent); }
 .btn.secondary:hover { background: #2a2000; }
+.btn.active { background: #0a2535; border-color: var(--blue); color: var(--blue); }
+.btn.active:hover { background: #0f3548; }
+.btn.danger { background: #2a0a0a; border-color: var(--red); color: var(--red); }
+.btn.danger:hover { background: #3a1010; }
+
+/* ── Painel de seleção ───────────────────────────────────── */
+#sel-info {
+  background: #0a1520;
+  border: 1px solid #1a3040;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-top: 6px;
+}
+#sel-info .sel-field { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+#sel-info .sel-field span { color: var(--text); }
+#sel-info .sel-field span.tip { color: var(--blue); }
+
+#sel-converter {
+  width: 100%; margin-top: 6px;
+  background: #1a1a1a; color: var(--text);
+  border: 1px solid var(--border); padding: 5px 6px;
+  font-family: monospace; font-size: 11px; border-radius: 3px;
+}
+
+.btn-row { display: flex; gap: 6px; margin-top: 6px; }
+.btn-row .btn { flex: 1; }
+.btn-small { width: auto; padding: 6px 12px; }
 
 /* ── Código exportado ────────────────────────────────────── */
 #code-out {
-  background: #080808;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 8px;
-  font-size: 9px;
-  color: #5fc;
-  white-space: pre;
-  overflow-x: auto;
-  max-height: 160px;
-  overflow-y: auto;
-  line-height: 1.55;
-  display: none;
+  background: #080808; border: 1px solid var(--border); border-radius: 4px;
+  padding: 8px; font-size: 9px; color: #5fc; white-space: pre;
+  overflow-x: auto; max-height: 160px; overflow-y: auto; line-height: 1.55; display: none;
 }
 #code-out::-webkit-scrollbar { width: 4px; height: 4px; }
 #code-out::-webkit-scrollbar-thumb { background: #333; }
 
 /* ── Info hover ──────────────────────────────────────────── */
 #hover-info {
-  position: absolute;
-  top: 8px; right: 8px;
-  background: rgba(0,0,0,0.8);
-  border: 1px solid #333;
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 10px;
-  color: var(--text);
-  pointer-events: none;
-  display: none;
-  max-width: 220px;
+  position: absolute; top: 8px; right: 8px;
+  background: rgba(0,0,0,0.85); border: 1px solid #333; border-radius: 4px;
+  padding: 6px 10px; font-size: 10px; color: var(--text);
+  pointer-events: none; display: none; max-width: 220px; line-height: 1.7;
 }
+#hover-info b { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -272,10 +224,43 @@ input[type=range] {
 <div id="panel">
   <div id="panel-header">
     <h1>▤ Editor de Estética</h1>
-    <p>GTA Santos — visualizador de ruas</p>
+    <p>GTA Santos — clique numa via para editar</p>
   </div>
 
   <div id="panel-body">
+
+    <!-- Edição de Via -->
+    <div>
+      <div class="section-title">Edição de Via</div>
+      <button class="btn" id="btn-modo-selecao" onclick="toggleModoSelecao()">Selecionar Via</button>
+
+      <div id="sel-info" style="display:none;">
+        <div class="sel-field">Tipo: <span id="sel-tipo-atual" class="tip"></span></div>
+        <div class="sel-field">Largura: <span id="sel-largura-atual"></span></div>
+        <div class="sel-field">Nome: <span id="sel-nome-atual"></span></div>
+
+        <label style="font-size:9px; color:var(--muted); display:block; margin-top:8px; margin-bottom:2px;">CONVERTER PARA</label>
+        <select id="sel-converter">
+          <option value="cycleway">Ciclovia  (cycleway)</option>
+          <option value="footway">Viela / Pedestre  (footway)</option>
+          <option value="path">Caminho  (path)</option>
+          <option value="service">Via de Serviço  (service)</option>
+          <option value="living_street">Rua de Convivência  (living_street)</option>
+          <option value="residential">Rua Residencial  (residential)</option>
+          <option value="unclassified">Rua Sem Classificação</option>
+          <option value="tertiary">Via Coletora  (tertiary)</option>
+          <option value="secondary">Avenida Secundária  (secondary)</option>
+          <option value="primary">Avenida Principal  (primary)</option>
+        </select>
+
+        <div class="btn-row">
+          <button class="btn active" onclick="aplicarConversao()">Converter</button>
+          <button class="btn danger btn-small" onclick="limparSelecao()">✕</button>
+        </div>
+      </div>
+
+      <div id="mod-count" style="font-size:9px; color:var(--accent); margin-top:6px; text-align:center; display:none;"></div>
+    </div>
 
     <!-- Categorias -->
     <div>
@@ -332,6 +317,7 @@ input[type=range] {
       <button class="btn" id="btn-reset-zoom">Centralizar Mapa</button>
       <button class="btn secondary" id="btn-export">Gerar Código GDScript</button>
       <button class="btn" id="btn-copy" style="display:none;">Copiar Código</button>
+      <button class="btn active" id="btn-salvar" onclick="salvarJSON()">⬇ Salvar santos.json</button>
     </div>
 
     <!-- Código -->
@@ -348,45 +334,56 @@ input[type=range] {
   </div>
 </div>
 
-<!-- Color pickers ocultos (um por categoria) -->
+<!-- Color pickers ocultos -->
 <div id="hidden-pickers" style="position:absolute; left:-9999px;"></div>
 
 <script>
 // ── Features geográficas ──────────────────────────────────────────────────────
 const FEATURES = [
-  { id: 'mar',    label: 'Mar',    tipo: 'poly', cor: '#1f599e', alfa: 0.70 },
-  { id: 'porto',  label: 'Porto',  tipo: 'poly', cor: '#615248', alfa: 0.75 },
-  { id: 'praia',  label: 'Praia',  tipo: 'poly', cor: '#ddd19e', alfa: 0.80 },
-  { id: 'verde',  label: 'Jardim', tipo: 'poly', cor: '#4d9440', alfa: 0.80 },
-  { id: 'agua',   label: 'Água',   tipo: 'poly', cor: '#2e72b8', alfa: 0.85 },
+  { id: 'mar',    label: 'Mar',    tipo: 'poly',  cor: '#1f599e', alfa: 0.70 },
+  { id: 'porto',  label: 'Porto',  tipo: 'poly',  cor: '#615248', alfa: 0.75 },
+  { id: 'praia',  label: 'Praia',  tipo: 'poly',  cor: '#ddd19e', alfa: 0.80 },
+  { id: 'verde',  label: 'Jardim', tipo: 'poly',  cor: '#4d9440', alfa: 0.80 },
+  { id: 'agua',   label: 'Água',   tipo: 'poly',  cor: '#2e72b8', alfa: 0.85 },
   { id: 'canais', label: 'Canais', tipo: 'linha', cor: '#2e80c7', alfa: 0.90 },
 ];
 
 // ── Categorias de via ─────────────────────────────────────────────────────────
 const CATEGORIAS = [
-  { id: 'rodovia',   label: 'Rodovia',       sub: 'largura ≥ 11',  minL: 11, maxL: 99,  cor: '#e8d161', alfa: 1.00, mult: 1.40, calçada: true },
-  { id: 'avenida',   label: 'Avenida',        sub: 'largura 7–10',  minL: 7,  maxL: 10,  cor: '#000000', alfa: 1.00, mult: 1.55, calçada: true },
-  { id: 'coletora',  label: 'Coletora',       sub: 'largura 6',     minL: 6,  maxL: 6,   cor: '#000000', alfa: 1.00, mult: 1.00, calçada: true },
-  { id: 'rua',       label: 'Rua',            sub: 'largura 4–5',   minL: 4,  maxL: 5,   cor: '#000000', alfa: 1.00, mult: 1.90, calçada: true },
-  { id: 'ciclovia',  label: 'Ciclovia',       sub: 'largura 3',     minL: 3,  maxL: 3,   cor: '#ad422d', alfa: 1.00, mult: 1.50, calçada: true },
-  { id: 'viela',     label: 'Viela',          sub: 'largura ≤ 2',   minL: 0,  maxL: 2,   cor: '#ffffff', alfa: 1.00, mult: 3.00, calçada: true },
+  { id: 'rodovia',  label: 'Rodovia',    sub: 'largura ≥ 11', minL: 11, maxL: 99, cor: '#e8d161', alfa: 1.00, mult: 1.40, calçada: true },
+  { id: 'avenida',  label: 'Avenida',    sub: 'largura 7–10', minL: 7,  maxL: 10, cor: '#000000', alfa: 1.00, mult: 1.55, calçada: true },
+  { id: 'coletora', label: 'Coletora',   sub: 'largura 6',    minL: 6,  maxL: 6,  cor: '#000000', alfa: 1.00, mult: 1.00, calçada: true },
+  { id: 'rua',      label: 'Rua',        sub: 'largura 4–5',  minL: 4,  maxL: 5,  cor: '#000000', alfa: 1.00, mult: 1.90, calçada: true },
+  { id: 'ciclovia', label: 'Ciclovia',   sub: 'tipo: cycleway', minL: 3, maxL: 3, cor: '#ad422d', alfa: 1.00, mult: 1.50, calçada: true },
+  { id: 'viela',    label: 'Viela',      sub: 'largura ≤ 2',  minL: 0,  maxL: 2,  cor: '#ffffff', alfa: 1.00, mult: 3.00, calçada: true },
 ];
 
+// ── Largura padrão por tipo OSM ───────────────────────────────────────────────
+const TIPO_PARA_LARGURA = {
+  cycleway: 2, footway: 2, path: 2,
+  service: 3, living_street: 3, unclassified: 4,
+  residential: 5, tertiary: 6, secondary: 8, primary: 10, trunk: 12,
+};
+
 // ── Estado ────────────────────────────────────────────────────────────────────
-let dados = null;
+let dados        = null;
 let dadosPredios = null;
 let dadosFeatures = null;
 let cam = { x: 0, y: 0, zoom: 1 };
-let pan = { dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 };
+let pan = { dragging: false, sx: 0, sy: 0, ox: 0, oy: 0, moveu: false };
 
-let bgColor = '#24292e';
+let modoSelecao    = false;
+let ruaSelecionada = null;
+let modificacoes   = 0;
+
+let bgColor      = '#24292e';
 let calçadaColor = '#1e1e1e';
 let calçadaExtra = 3.5;
 
 // ── Canvas ────────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-const wrap = document.getElementById('canvas-wrap');
+const ctx    = canvas.getContext('2d');
+const wrap   = document.getElementById('canvas-wrap');
 
 function resizeCanvas() {
   canvas.width  = wrap.clientWidth;
@@ -412,22 +409,30 @@ async function carregarDados() {
     document.getElementById('status').style.color = '#f54';
   }
 
-  // Tenta carregar prédios 2.5D também
   try {
     const r2 = await fetch('maps/santos_predios_godot.json');
     if (r2.ok) dadosPredios = await r2.json();
   } catch(_) {}
 
-  // Carrega features geográficas (mar, praia, jardim, porto, canais…)
   try {
     const r3 = await fetch('maps/santos_features.json');
-    if (r3.ok) {
-      dadosFeatures = await r3.json();
-      const totais = FEATURES.map(f => `${f.label}:${(dadosFeatures[f.id]||[]).length}`).join(' ');
-      console.log('[Features] ' + totais);
-    }
+    if (r3.ok) dadosFeatures = await r3.json();
   } catch(_) {}
   render();
+}
+
+// ── Determina categoria de uma via ───────────────────────────────────────────
+function catDe(rua) {
+  const largura = typeof rua === 'number' ? rua : rua.largura;
+  const tipo    = typeof rua === 'object' ? (rua.tipo || '') : '';
+  // Ciclovia: detectada pelo campo tipo (ou largura==3 em JSON antigo sem tipo)
+  if (tipo === 'cycleway' || (tipo === '' && largura === 3)) {
+    return CATEGORIAS.find(c => c.id === 'ciclovia');
+  }
+  for (const c of CATEGORIAS) {
+    if (largura >= c.minL && largura <= c.maxL) return c;
+  }
+  return CATEGORIAS[CATEGORIAS.length - 1];
 }
 
 // ── Features UI ───────────────────────────────────────────────────────────────
@@ -437,43 +442,27 @@ function buildFeaturesUI() {
 
   FEATURES.forEach(feat => {
     feat.visivel = true;
-
     const picker = document.createElement('input');
-    picker.type = 'color';
-    picker.id = 'picker-feat-' + feat.id;
-    picker.value = feat.cor;
-    picker.addEventListener('input', () => {
-      feat.cor = picker.value;
-      btn.style.background = feat.cor;
-      render();
-    });
+    picker.type = 'color'; picker.id = 'picker-feat-' + feat.id; picker.value = feat.cor;
+    picker.addEventListener('input', () => { feat.cor = picker.value; btn.style.background = feat.cor; render(); });
     pickerDiv.appendChild(picker);
 
     const btn = document.createElement('button');
-    btn.className = 'color-btn';
-    btn.style.background = feat.cor;
-    btn.title = 'Mudar cor';
+    btn.className = 'color-btn'; btn.style.background = feat.cor; btn.title = 'Mudar cor';
     btn.onclick = () => picker.click();
 
     const vis = document.createElement('input');
-    vis.type = 'checkbox';
-    vis.checked = true;
-    vis.style.accentColor = 'var(--accent)';
+    vis.type = 'checkbox'; vis.checked = true; vis.style.accentColor = 'var(--accent)';
     vis.addEventListener('change', () => { feat.visivel = vis.checked; render(); });
 
-    const row = document.createElement('div');
-    row.className = 'cat-row';
+    const row = document.createElement('div'); row.className = 'cat-row';
     const labelDiv = document.createElement('div');
-    const tipoTag = feat.tipo === 'linha' ? 'linha' : 'polígono';
-    labelDiv.innerHTML = `<span class="cat-label">${feat.label}</span><span class="cat-sub">${tipoTag}</span>`;
-    row.appendChild(labelDiv);
-    row.appendChild(vis);
-    row.appendChild(btn);
+    labelDiv.innerHTML = `<span class="cat-label">${feat.label}</span><span class="cat-sub">${feat.tipo === 'linha' ? 'linha' : 'polígono'}</span>`;
+    row.appendChild(labelDiv); row.appendChild(vis); row.appendChild(btn);
     container.appendChild(row);
 
     const sliders = document.createElement('div');
-    sliders.className = 'slider-wrap';
-    sliders.style.marginBottom = '4px';
+    sliders.className = 'slider-wrap'; sliders.style.marginBottom = '4px';
     sliders.innerHTML = `
       <div class="slider-row">
         <label>Opacidade</label>
@@ -495,51 +484,29 @@ function buildCatsUI() {
   const container = document.getElementById('cats');
   const pickerDiv = document.getElementById('hidden-pickers');
 
-  CATEGORIAS.forEach((cat, i) => {
-    // picker oculto
+  CATEGORIAS.forEach(cat => {
     const picker = document.createElement('input');
-    picker.type = 'color';
-    picker.id = 'picker-' + cat.id;
-    picker.value = cat.cor;
-    picker.addEventListener('input', () => {
-      cat.cor = picker.value;
-      btn.style.background = cat.cor;
-      render();
-    });
+    picker.type = 'color'; picker.id = 'picker-' + cat.id; picker.value = cat.cor;
+    picker.addEventListener('input', () => { cat.cor = picker.value; btn.style.background = cat.cor; render(); });
     pickerDiv.appendChild(picker);
 
-    // swatch button
     const btn = document.createElement('button');
-    btn.className = 'color-btn';
-    btn.style.background = cat.cor;
-    btn.title = 'Clique para mudar a cor';
+    btn.className = 'color-btn'; btn.style.background = cat.cor; btn.title = 'Clique para mudar a cor';
     btn.onclick = () => picker.click();
 
-    // visibilidade (eye)
     const vis = document.createElement('input');
-    vis.type = 'checkbox';
-    vis.checked = true;
-    vis.title = 'Visível';
-    vis.style.accentColor = 'var(--accent)';
+    vis.type = 'checkbox'; vis.checked = true; vis.title = 'Visível'; vis.style.accentColor = 'var(--accent)';
     vis.addEventListener('change', () => { cat.visivel = vis.checked; render(); });
     cat.visivel = true;
 
-    // row principal
-    const row = document.createElement('div');
-    row.className = 'cat-row';
-
+    const row = document.createElement('div'); row.className = 'cat-row';
     const labelDiv = document.createElement('div');
     labelDiv.innerHTML = `<span class="cat-label">${cat.label}</span><span class="cat-sub">${cat.sub}</span>`;
-
-    row.appendChild(labelDiv);
-    row.appendChild(vis);
-    row.appendChild(btn);
+    row.appendChild(labelDiv); row.appendChild(vis); row.appendChild(btn);
     container.appendChild(row);
 
-    // sliders de alfa e mult
     const sliders = document.createElement('div');
-    sliders.className = 'slider-wrap';
-    sliders.style.marginBottom = '4px';
+    sliders.className = 'slider-wrap'; sliders.style.marginBottom = '4px';
     sliders.innerHTML = `
       <div class="slider-row">
         <label>Opacidade</label>
@@ -566,26 +533,15 @@ function buildCatsUI() {
   });
 }
 
-function catDe(largura) {
-  for (const c of CATEGORIAS) {
-    if (largura >= c.minL && largura <= c.maxL) return c;
-  }
-  return CATEGORIAS[CATEGORIAS.length - 1];
-}
-
 // ── Controles de fundo ────────────────────────────────────────────────────────
 document.getElementById('bg-btn').onclick = () => document.getElementById('bg-color').click();
 document.getElementById('bg-color').addEventListener('input', function() {
-  bgColor = this.value;
-  document.getElementById('bg-btn').style.background = bgColor;
-  render();
+  bgColor = this.value; document.getElementById('bg-btn').style.background = bgColor; render();
 });
 
 document.getElementById('calçada-btn').onclick = () => document.getElementById('calçada-color').click();
 document.getElementById('calçada-color').addEventListener('input', function() {
-  calçadaColor = this.value;
-  document.getElementById('calçada-btn').style.background = calçadaColor;
-  render();
+  calçadaColor = this.value; document.getElementById('calçada-btn').style.background = calçadaColor; render();
 });
 
 document.getElementById('calçada-extra').addEventListener('input', function() {
@@ -594,7 +550,6 @@ document.getElementById('calçada-extra').addEventListener('input', function() {
   render();
 });
 
-// checkboxes
 ['show-ruas','show-predios','show-oneway','show-grid'].forEach(id =>
   document.getElementById(id).addEventListener('change', render));
 
@@ -602,25 +557,21 @@ document.getElementById('calçada-extra').addEventListener('input', function() {
 function render() {
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
-
-  // fundo
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, W, H);
-
   if (!dados) return;
 
   ctx.save();
   ctx.translate(cam.x, cam.y);
   ctx.scale(cam.zoom, cam.zoom);
 
-  // grade
   if (document.getElementById('show-grid').checked) desenharGrade();
 
   const showRuas    = document.getElementById('show-ruas').checked;
   const showPredios = document.getElementById('show-predios').checked;
   const showOneway  = document.getElementById('show-oneway').checked;
 
-  // features geográficas (mar → porto → praia → jardim → água → canais)
+  // Features geográficas
   if (dadosFeatures) {
     for (const feat of FEATURES) {
       if (!feat.visivel) continue;
@@ -633,50 +584,41 @@ function render() {
           ctx.beginPath();
           ctx.moveTo(pts[0][0], pts[0][1]);
           for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-          ctx.closePath();
-          ctx.fillStyle = corRgba;
-          ctx.fill();
+          ctx.closePath(); ctx.fillStyle = corRgba; ctx.fill();
         }
       } else {
-        // canais: linhas
         for (const c of itens) {
           const pts = c.pontos;
           if (!pts || pts.length < 2) continue;
           ctx.beginPath();
           ctx.moveTo(pts[0][0], pts[0][1]);
           for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-          ctx.strokeStyle = corRgba;
-          ctx.lineWidth = (c.largura || 15);
-          ctx.lineCap  = 'round';
-          ctx.lineJoin = 'round';
-          ctx.stroke();
+          ctx.strokeStyle = corRgba; ctx.lineWidth = (c.largura || 15);
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
         }
       }
     }
   }
 
-  // calçadas (ruas com largura aumentada)
+  // Calçadas
   if (showRuas) {
     for (const rua of dados.ruas) {
-      const cat = catDe(rua.largura);
-      if (!cat.visivel) continue;
-      if (!cat.calçada) continue;
+      const cat = catDe(rua);
+      if (!cat.visivel || !cat.calçada) continue;
       ctx.beginPath();
       const pts = rua.pontos;
       ctx.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.strokeStyle = calçadaColor;
       ctx.lineWidth = rua.largura * cat.mult + calçadaExtra * 2;
-      ctx.lineCap  = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
     }
   }
 
-  // ruas
+  // Ruas
   if (showRuas) {
     for (const rua of dados.ruas) {
-      const cat = catDe(rua.largura);
+      const cat = catDe(rua);
       if (!cat.visivel) continue;
       ctx.beginPath();
       const pts = rua.pontos;
@@ -684,16 +626,13 @@ function render() {
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.strokeStyle = hexComAlfa(cat.cor, cat.alfa);
       ctx.lineWidth = rua.largura * cat.mult;
-      ctx.lineCap  = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
     }
   }
 
-  // setas mão única
   if (showRuas && showOneway) desenharOneway();
 
-  // prédios
+  // Prédios
   if (showPredios && dadosPredios) {
     for (const p of dadosPredios.predios) {
       const pts = p.poly_px;
@@ -701,12 +640,9 @@ function render() {
       ctx.beginPath();
       ctx.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(80,75,70,0.5)';
-      ctx.fill();
+      ctx.closePath(); ctx.fillStyle = 'rgba(80,75,70,0.5)'; ctx.fill();
       ctx.strokeStyle = 'rgba(120,115,110,0.3)';
-      ctx.lineWidth = 0.5 / cam.zoom;
-      ctx.stroke();
+      ctx.lineWidth = 0.5 / cam.zoom; ctx.stroke();
     }
   } else if (showPredios && dados.predios) {
     for (const p of dados.predios) {
@@ -715,8 +651,32 @@ function render() {
       ctx.beginPath();
       ctx.moveTo(pts[0][0], pts[0][1]);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(70,65,60,0.4)';
+      ctx.closePath(); ctx.fillStyle = 'rgba(70,65,60,0.4)'; ctx.fill();
+    }
+  }
+
+  // Destaque da via selecionada
+  if (modoSelecao && ruaSelecionada) {
+    const pts = ruaSelecionada.pontos;
+    // Halo externo
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.strokeStyle = 'rgba(255,220,50,0.35)';
+    ctx.lineWidth = Math.max(ruaSelecionada.largura * 4, 8);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+    // Linha principal
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.strokeStyle = 'rgba(255,220,50,0.95)';
+    ctx.lineWidth = Math.max(ruaSelecionada.largura * 1.5, 2);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+    // Pontos de controle
+    ctx.fillStyle = '#ffdc32';
+    for (const pt of pts) {
+      ctx.beginPath();
+      ctx.arc(pt[0], pt[1], Math.max(3 / cam.zoom, 1), 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -736,10 +696,10 @@ function desenharGrade() {
   ctx.strokeStyle = 'rgba(255,255,255,0.04)';
   ctx.lineWidth = 1 / cam.zoom;
   for (let x = 0; x < 10000; x += step) {
-    ctx.beginPath(); ctx.moveTo(x, -100); ctx.lineTo(x, 12000); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,-100); ctx.lineTo(x,12000); ctx.stroke();
   }
   for (let y = 0; y < 12000; y += step) {
-    ctx.beginPath(); ctx.moveTo(-100, y); ctx.lineTo(10000, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-100,y); ctx.lineTo(10000,y); ctx.stroke();
   }
 }
 
@@ -749,40 +709,36 @@ function desenharOneway() {
   for (const rua of dados.ruas) {
     if (!rua.oneway) continue;
     const pts = rua.pontos;
-    // desenha seta no meio
     const mi = Math.floor(pts.length / 2);
     if (mi < 1) continue;
     const ax = pts[mi-1][0], ay = pts[mi-1][1];
     const bx = pts[mi][0],   by = pts[mi][1];
-    const ang = Math.atan2(by - ay, bx - ax);
-    const mx = (ax + bx) / 2, my = (ay + by) / 2;
-    ctx.save();
-    ctx.translate(mx, my);
-    ctx.rotate(ang);
+    const ang = Math.atan2(by-ay, bx-ax);
+    const mx = (ax+bx)/2, my = (ay+by)/2;
+    ctx.save(); ctx.translate(mx,my); ctx.rotate(ang);
     ctx.beginPath();
-    ctx.moveTo(arrowLen, 0);
-    ctx.lineTo(-arrowLen * 0.5,  arrowLen * 0.4);
-    ctx.lineTo(-arrowLen * 0.5, -arrowLen * 0.4);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
+    ctx.moveTo(arrowLen,0);
+    ctx.lineTo(-arrowLen*0.5, arrowLen*0.4);
+    ctx.lineTo(-arrowLen*0.5,-arrowLen*0.4);
+    ctx.closePath(); ctx.fill(); ctx.restore();
   }
 }
 
 // ── Pan & Zoom ────────────────────────────────────────────────────────────────
 canvas.addEventListener('mousedown', e => {
-  pan.dragging = true;
+  pan.dragging = true; pan.moveu = false;
   pan.sx = e.clientX; pan.sy = e.clientY;
   pan.ox = cam.x;     pan.oy = cam.y;
   canvas.classList.add('panning');
 });
+
 window.addEventListener('mousemove', e => {
   if (pan.dragging) {
+    if (Math.abs(e.clientX-pan.sx) > 4 || Math.abs(e.clientY-pan.sy) > 4) pan.moveu = true;
     cam.x = pan.ox + (e.clientX - pan.sx);
     cam.y = pan.oy + (e.clientY - pan.sy);
     render();
   }
-  // coords
   const rect = canvas.getBoundingClientRect();
   const wx = (e.clientX - rect.left - cam.x) / cam.zoom;
   const wy = (e.clientY - rect.top  - cam.y) / cam.zoom;
@@ -790,6 +746,7 @@ window.addEventListener('mousemove', e => {
     `x: ${wx.toFixed(0)}  y: ${wy.toFixed(0)}  zoom: ${cam.zoom.toFixed(3)}`;
   mostrarHover(wx, wy, e.clientX, e.clientY);
 });
+
 window.addEventListener('mouseup', () => {
   pan.dragging = false;
   canvas.classList.remove('panning');
@@ -798,8 +755,7 @@ window.addEventListener('mouseup', () => {
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
   const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
   const fator = e.deltaY < 0 ? 1.12 : 1/1.12;
   const novoZoom = Math.max(0.0005, Math.min(5, cam.zoom * fator));
   cam.x = mx - (mx - cam.x) * (novoZoom / cam.zoom);
@@ -808,7 +764,34 @@ canvas.addEventListener('wheel', e => {
   render();
 }, { passive: false });
 
-// ── Hover: mostra info da rua mais próxima ────────────────────────────────────
+// ── Clique para selecionar via ────────────────────────────────────────────────
+canvas.addEventListener('click', e => {
+  if (!modoSelecao || pan.moveu || !dados) return;
+  const rect = canvas.getBoundingClientRect();
+  const wx = (e.clientX - rect.left - cam.x) / cam.zoom;
+  const wy = (e.clientY - rect.top  - cam.y) / cam.zoom;
+
+  let bestDist = Infinity, bestRua = null;
+  const limiar = 30 / cam.zoom;
+  for (const rua of dados.ruas) {
+    const pts = rua.pontos;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const d = distSegmento(wx, wy, pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1]);
+      if (d < bestDist) { bestDist = d; bestRua = rua; }
+    }
+  }
+
+  if (bestRua && bestDist < limiar) {
+    ruaSelecionada = bestRua;
+    atualizarPainelSelecao();
+  } else {
+    ruaSelecionada = null;
+    document.getElementById('sel-info').style.display = 'none';
+  }
+  render();
+});
+
+// ── Hover ─────────────────────────────────────────────────────────────────────
 let hoverTimeout = null;
 function mostrarHover(wx, wy, cx, cy) {
   if (!dados) return;
@@ -825,11 +808,16 @@ function mostrarHover(wx, wy, cx, cy) {
     }
     const el = document.getElementById('hover-info');
     if (bestRua && bestDist < limiar) {
-      const cat = catDe(bestRua.largura);
+      const cat = catDe(bestRua);
       el.style.display = 'block';
-      el.style.left = (cx + 12) + 'px';
+      el.style.left = (cx + 14) + 'px';
       el.style.top  = (cy - 10) + 'px';
-      el.innerHTML  = `<b>${cat.label}</b><br>largura: ${bestRua.largura}<br>mão única: ${bestRua.oneway ? 'sim' : 'não'}`;
+      el.innerHTML  =
+        `<b>${cat.label}</b><br>` +
+        `tipo: <span style="color:var(--blue)">${bestRua.tipo || '—'}</span><br>` +
+        `largura: ${bestRua.largura}<br>` +
+        `mão única: ${bestRua.oneway ? 'sim' : 'não'}` +
+        (bestRua.nome ? `<br>${bestRua.nome}` : '');
     } else {
       el.style.display = 'none';
     }
@@ -844,10 +832,80 @@ function distSegmento(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + t*dx), py - (ay + t*dy));
 }
 
+// ── Modo seleção ──────────────────────────────────────────────────────────────
+function toggleModoSelecao() {
+  modoSelecao = !modoSelecao;
+  const btn = document.getElementById('btn-modo-selecao');
+  btn.textContent = modoSelecao ? '✓ Seleção ATIVA — clique numa via' : 'Selecionar Via';
+  btn.className   = modoSelecao ? 'btn active' : 'btn';
+  canvas.classList.toggle('selecting', modoSelecao);
+  if (!modoSelecao) limparSelecao();
+}
+
+function atualizarPainelSelecao() {
+  if (!ruaSelecionada) return;
+  document.getElementById('sel-info').style.display = 'block';
+  document.getElementById('sel-tipo-atual').textContent    = ruaSelecionada.tipo || '(sem tipo)';
+  document.getElementById('sel-largura-atual').textContent = ruaSelecionada.largura;
+  document.getElementById('sel-nome-atual').textContent    = ruaSelecionada.nome || '(sem nome)';
+
+  // Pré-seleciona no dropdown o tipo atual
+  const sel = document.getElementById('sel-converter');
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === ruaSelecionada.tipo) { sel.selectedIndex = i; break; }
+  }
+}
+
+function aplicarConversao() {
+  if (!ruaSelecionada) return;
+  const novoTipo = document.getElementById('sel-converter').value;
+  const tipoAnterior = ruaSelecionada.tipo;
+
+  ruaSelecionada.tipo = novoTipo;
+  if (TIPO_PARA_LARGURA[novoTipo] !== undefined) {
+    ruaSelecionada.largura = TIPO_PARA_LARGURA[novoTipo];
+  }
+
+  modificacoes++;
+  const el = document.getElementById('mod-count');
+  el.style.display = 'block';
+  el.textContent   = `● ${modificacoes} modificação(ões) não salva(s)`;
+
+  atualizarPainelSelecao();
+  atualizarEstatisticas();
+  render();
+
+  console.log(`[Editor] ${tipoAnterior} → ${novoTipo} | largura: ${ruaSelecionada.largura}`);
+}
+
+function limparSelecao() {
+  ruaSelecionada = null;
+  document.getElementById('sel-info').style.display = 'none';
+  render();
+}
+
+// ── Salvar JSON ───────────────────────────────────────────────────────────────
+function salvarJSON() {
+  if (!dados) return;
+  const json = JSON.stringify(dados);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'santos.json';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  const el = document.getElementById('mod-count');
+  if (modificacoes > 0) {
+    el.textContent = `✓ ${modificacoes} modificação(ões) salva(s) em santos.json`;
+    el.style.color = 'var(--green)';
+  }
+}
+
 // ── Centralizar ───────────────────────────────────────────────────────────────
 function centralizarMapa() {
   if (!dados) return;
-  // bounds das ruas
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const rua of dados.ruas) {
     for (const p of rua.pontos) {
@@ -855,11 +913,8 @@ function centralizarMapa() {
       if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1];
     }
   }
-  const W = canvas.width, H = canvas.height;
-  const margin = 40;
-  const zx = (W - margin*2) / (maxX - minX);
-  const zy = (H - margin*2) / (maxY - minY);
-  cam.zoom = Math.min(zx, zy);
+  const W = canvas.width, H = canvas.height, margin = 40;
+  cam.zoom = Math.min((W - margin*2) / (maxX - minX), (H - margin*2) / (maxY - minY));
   cam.x = margin - minX * cam.zoom;
   cam.y = margin - minY * cam.zoom;
   render();
@@ -873,7 +928,7 @@ function atualizarEstatisticas() {
   CATEGORIAS.forEach(c => contagem[c.id] = 0);
   let oneway = 0;
   for (const rua of dados.ruas) {
-    const cat = catDe(rua.largura);
+    const cat = catDe(rua);
     contagem[cat.id]++;
     if (rua.oneway) oneway++;
   }
@@ -899,7 +954,7 @@ document.getElementById('btn-export').onclick = () => {
   linhas.push('# Cole em world_osm.gd — substitui _criar_ruas_visual() e funções auxiliares');
   linhas.push('');
   linhas.push('func _criar_ruas_visual():');
-  linhas.push('\t# Calçadas (largura aumentada)');
+  linhas.push('\t# Calçadas');
   linhas.push('\tfor rua in _dados["ruas"]:');
   linhas.push('\t\tvar largura = float(rua["largura"])');
   linhas.push('\t\tvar cor_calcada = Color(' + hexParaGD(calçadaColor) + ')');
@@ -913,13 +968,15 @@ document.getElementById('btn-export').onclick = () => {
   linhas.push('\t\tcalcada.joint_mode = Line2D.LINE_JOINT_ROUND');
   linhas.push('\t\tcalcada.begin_cap_mode = Line2D.LINE_CAP_ROUND');
   linhas.push('\t\tcalcada.end_cap_mode = Line2D.LINE_CAP_ROUND');
-  linhas.push('\t\tcalcada.round_precision = 32');
+  linhas.push('\t\tcalcada.round_precision = _round_prec');
   linhas.push('\t\tcalcada.z_index = _z_rua(largura) - 30');
   linhas.push('\t\tadd_child(calcada)');
   linhas.push('');
   linhas.push('\t# Ruas');
   linhas.push('\tfor rua in _dados["ruas"]:');
   linhas.push('\t\tvar largura = float(rua["largura"])');
+  linhas.push('\t\tvar tipo_rua = rua.get("tipo", "")');
+  linhas.push('\t\tvar eh_ciclovia = (tipo_rua == "cycleway") or (tipo_rua == "" and largura == 3)');
   linhas.push('\t\tvar linha = Line2D.new()');
   linhas.push('\t\tvar pts = PoolVector2Array()');
   linhas.push('\t\tfor p in rua["pontos"]: pts.append(Vector2(p[0], p[1]))');
@@ -927,7 +984,7 @@ document.getElementById('btn-export').onclick = () => {
   linhas.push('\t\tif largura <= 3:');
   linhas.push('\t\t\tlinha.texture = _obter_textura_viela_procedural()');
   linhas.push('\t\t\tlinha.texture_mode = Line2D.LINE_TEXTURE_TILE');
-  linhas.push('\t\t\tif largura == 3:');
+  linhas.push('\t\t\tif eh_ciclovia:');
   linhas.push('\t\t\t\tlinha.default_color = Color(0.68, 0.26, 0.18, 1.00)');
   linhas.push('\t\t\telse:');
   linhas.push('\t\t\t\tlinha.default_color = Color(1.00, 1.00, 1.00, 1.00)');
@@ -937,21 +994,21 @@ document.getElementById('btn-export').onclick = () => {
   linhas.push('\t\tlinha.joint_mode = Line2D.LINE_JOINT_ROUND');
   linhas.push('\t\tlinha.begin_cap_mode = Line2D.LINE_CAP_ROUND');
   linhas.push('\t\tlinha.end_cap_mode = Line2D.LINE_CAP_ROUND');
-  linhas.push('\t\tlinha.round_precision = 32');
+  linhas.push('\t\tlinha.round_precision = _round_prec');
   linhas.push('\t\tlinha.z_index = _z_rua(largura) - 24');
   linhas.push('\t\tadd_child(linha)');
   linhas.push('');
-  linhas.push('\t\tif largura >= 7 or largura == 3:');
+  linhas.push('\t\tif largura >= 7 or eh_ciclovia:');
   linhas.push('\t\t\tvar faixa = Line2D.new()');
   linhas.push('\t\t\tfaixa.points = pts');
   linhas.push('\t\t\tfaixa.default_color = Color(1.0, 1.0, 1.0, 0.85)');
-  linhas.push('\t\t\tfaixa.width = 0.10 if largura == 3 else 0.15');
+  linhas.push('\t\t\tfaixa.width = 0.10 if eh_ciclovia else 0.15');
   linhas.push('\t\t\tfaixa.texture = _obter_textura_pontilhada()');
   linhas.push('\t\t\tfaixa.texture_mode = Line2D.LINE_TEXTURE_TILE');
   linhas.push('\t\t\tfaixa.joint_mode = Line2D.LINE_JOINT_ROUND');
   linhas.push('\t\t\tfaixa.begin_cap_mode = Line2D.LINE_CAP_ROUND');
   linhas.push('\t\t\tfaixa.end_cap_mode = Line2D.LINE_CAP_ROUND');
-  linhas.push('\t\t\tfaixa.round_precision = 32');
+  linhas.push('\t\t\tfaixa.round_precision = _round_prec');
   linhas.push('\t\t\tfaixa.z_index = linha.z_index + 1');
   linhas.push('\t\t\tadd_child(faixa)');
   linhas.push('');
@@ -985,14 +1042,6 @@ document.getElementById('btn-export').onclick = () => {
     linhas.push(`\tif ${cond}: return ${c.mult.toFixed(2)}`);
   });
   linhas.push('\treturn 1.0');
-  linhas.push('');
-  linhas.push('func _z_rua(largura: float) -> int:');
-  linhas.push('\tif largura >= 11: return 5');
-  linhas.push('\tif largura >= 7 and largura <= 10: return 4');
-  linhas.push('\tif largura == 6: return 3');
-  linhas.push('\tif largura >= 4 and largura <= 5: return 2');
-  linhas.push('\tif largura == 3: return 1');
-  linhas.push('\treturn 0');
 
   const code = linhas.join('\n');
   document.getElementById('code-out').textContent = code;

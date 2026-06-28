@@ -17,6 +17,7 @@ var _tiro_cd     = 0.0
 var _joy         = null
 
 onready var _sprite : Sprite   = $Sprite
+onready var _sombra : Sprite   = $Sombra
 onready var _camera : Camera2D = $Camera2D
 
 func _physics_process(delta: float) -> void:
@@ -33,7 +34,7 @@ func _physics_process(delta: float) -> void:
 	if joy != null and joy.output.length() > joy.dead_zone:
 		var dir = joy.output
 		# ângulo no padrão do Godot: atan2(y,x) - 90° para que "cima" = rotation 0
-		rotation = lerp_angle(rotation, atan2(dir.y, dir.x) - PI * 0.5, 15.0 * delta)
+		rotation = atan2(dir.y, dir.x) - PI * 0.5
 		move_and_slide(dir.normalized() * VELOCIDADE)
 		_animar(delta)
 		return
@@ -53,8 +54,9 @@ func _physics_process(delta: float) -> void:
 	if av != 0.0:
 		_animar(delta)
 	else:
-		_frame_timer = 0.0
+		_frame_timer  = 0.0
 		_sprite.frame = 0
+		_sombra.frame = 0
 
 
 func _animar(delta: float) -> void:
@@ -63,6 +65,7 @@ func _animar(delta: float) -> void:
 		_frame_timer -= 1.0 / FPS_ANIM
 		_frame_atual  = (_frame_atual + 1) % N_FRAMES
 		_sprite.frame = _frame_atual
+		_sombra.frame = _frame_atual
 
 
 func _joystick():

@@ -138,6 +138,8 @@ func _indexar_predios_2p5d_por_chunk() -> void:
 		_predios_2p5d_chunk[k].append(predio)
 
 
+var _pos_pre_atual: Vector2 = Vector2.ZERO
+
 func _atualizar_chunks() -> void:
 	var novos: Dictionary = {}
 	var cx0 = int(_chunk_player.x)
@@ -174,6 +176,21 @@ func _carregar_chunk(k: String) -> void:
 			_predios_dinamicos.append(entry)
 	_visuais_chunk[k]   = visuais
 	_dinamicos_chunk[k] = dinamicos
+
+	# Inicializa os quads de todos os prédios do chunk imediatamente,
+	# sem filtro de distância, para que apareçam visíveis desde o primeiro frame.
+	for entry in dinamicos:
+		var dir    = (entry.centro - _pos_pre_atual).normalized()
+		var offset = dir * (entry.wall_px as float)
+		entry.roof.position      = offset
+		entry["ultimo_offset"]   = offset
+		var pool  = entry.pool
+		var quads = entry.quads
+		var n     = pool.size()
+		for i in range(n):
+			var a = pool[i]
+			var b = pool[(i + 1) % n]
+			quads[i].polygon = PoolVector2Array([a, b, b + offset, a + offset])
 
 
 func _descarregar_chunk(k: String) -> void:
@@ -767,6 +784,7 @@ func _centroide(pool: PoolVector2Array) -> Vector2:
 func atualizar_parallax(pos_jogo: Vector2) -> void:
 	# Lazy loading: verifica se o player mudou de chunk
 	var pos_pre    = pos_jogo / ESCALA
+	_pos_pre_atual = pos_pre
 	var chunk_novo = Vector2(int(pos_pre.x / CHUNK_SIZE_PRE), int(pos_pre.y / CHUNK_SIZE_PRE))
 	if chunk_novo != _chunk_player:
 		_chunk_player = chunk_novo

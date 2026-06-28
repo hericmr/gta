@@ -54,7 +54,7 @@ func _process(delta: float) -> void:
 			var spd_frac = clamp(speed_len / 774.0, 0.0, 1.0)
 			var zoom_alvo = lerp(1.15, 1.85, spd_frac)
 			var cam = _player.get_node("Camera2D")
-			cam.zoom = cam.zoom.linear_interpolate(Vector2(zoom_alvo, zoom_alvo), 4.0 * delta)
+			cam.zoom = Vector2(zoom_alvo, zoom_alvo)
 		else:
 			_sair_do_onibus_forcado()
 

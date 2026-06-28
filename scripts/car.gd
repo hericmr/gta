@@ -303,7 +303,7 @@ func _physics_process(delta: float) -> void:
 	# ── Look-ahead + Efeito G (Força Centrífuga Visual) ───────────────────────
 	var spd_frac    = clamp(_velocity.length() / max_speed, 0.0, 1.0)
 	var look_target = Vector2(0.0, -LOOK_AHEAD * spd_frac) if _velocity.length() > 50.0 else Vector2.ZERO
-	_look_ahead_offset = lerp(_look_ahead_offset, look_target, LOOK_AHEAD_VEL * delta)
+	_look_ahead_offset = look_target
 	
 	# Deslocamento lateral da câmera simulando a força centrífuga (força G lateral)
 	var lateral_g = _velocity.dot(transform.x)
@@ -327,7 +327,7 @@ func _physics_process(delta: float) -> void:
 
 	# ── Zoom dinâmico ─────────────────────────────────────────────────────────
 	var zoom_alvo = lerp(1.15, 1.85, clamp(_velocity.length() / max_speed, 0.0, 1.0))
-	_camera.zoom  = lerp(_camera.zoom, Vector2(zoom_alvo, zoom_alvo), 4.0 * delta)
+	_camera.zoom  = Vector2(zoom_alvo, zoom_alvo)
 
 	emit_signal("velocidade_mudou", _velocity.length() * 0.131)
 

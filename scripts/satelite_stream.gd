@@ -149,7 +149,7 @@ func _criar_sprite(tx: int, ty: int, tex: Texture) -> void:
 	sprite.position   = _tile_para_pos(tx, ty)
 	var esc           = _tile_size_game() / float(TILE_PX)
 	sprite.scale      = Vector2(esc, esc)
-	sprite.z_index    = -10
+	sprite.z_index    = -45
 	add_child(sprite)
 	_tiles[chave]     = sprite
 
