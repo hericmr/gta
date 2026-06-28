@@ -45,6 +45,10 @@ var _half_h:      float  = 0.0
 var _pausa_t:          float  = 0.0
 var _espera_t:         float  = 0.0
 var _esperando_onibus: bool   = false
+var no_onibus:         bool   = false
+var recem_desembarcado: bool  = false
+var _tempo_idle:       float  = 0.0
+var _desvio_idle:      Vector2 = Vector2.ZERO
 
 signal chegou_ao_fim
 
@@ -100,6 +104,7 @@ func _aplicar_combinacao() -> void:
 func atropelar() -> void:
 	if _morto:
 		return
+	_tocar_som_morte()
 	_morto     = true
 	_terminado = true
 	collision_layer = 0
@@ -175,7 +180,7 @@ func _aplicar_offset_lateral(wps: PoolVector2Array) -> PoolVector2Array:
 	var n = wps.size()
 	if n < 2:
 		return wps
-	var off = rand_range(-26.0, 26.0)
+	var off = rand_range(-14.0, 14.0)
 	var result = PoolVector2Array()
 	for i in range(n):
 		var perp: Vector2
@@ -192,13 +197,16 @@ func _aplicar_offset_lateral(wps: PoolVector2Array) -> PoolVector2Array:
 	return result
 
 
-func caminhar_para(destino: Vector2) -> void:
+func caminhar_para(destino_global: Vector2) -> void:
 	_esperando_onibus = false
-	_wps       = PoolVector2Array([destino])
+	var local_dest = get_parent().to_local(destino_global)
+	_wps       = PoolVector2Array([local_dest])
 	_idx       = 0
 	_terminado = false
 	_espera_t  = 0.0
 	_pausa_t   = 0.0
+	_tempo_idle = 0.0
+	_desvio_idle = Vector2.ZERO
 
 
 func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
@@ -210,6 +218,8 @@ func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 	_frame_timer = 0.0
 	_pausa_t     = 0.0
 	_espera_t    = rand_range(ESPERA_FIM_MIN, ESPERA_FIM_MAX)
+	_tempo_idle  = 0.0
+	_desvio_idle = Vector2.ZERO
 	var sz = _wps.size()
 	_idx = start if start < sz else (sz - 1 if sz > 0 else 0)
 	if _idx < _wps.size():
@@ -218,6 +228,34 @@ func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 
 func _physics_process(delta: float) -> void:
 	if _morto:
+		return
+
+	if _esperando_onibus:
+		_tempo_idle -= delta
+		if _tempo_idle <= 0.0:
+			_tempo_idle = rand_range(4.0, 10.0) # muda de posição a cada 4-10 segundos
+			_desvio_idle = Vector2(rand_range(-35.0, 35.0), rand_range(-35.0, 35.0))
+			
+		if _desvio_idle != Vector2.ZERO:
+			var alvo = _wps[_wps.size() - 1] + _desvio_idle
+			var dir = alvo - position
+			var dist = dir.length()
+			if dist > 8.0:
+				rotation = atan2(dir.y, dir.x) - PI * 0.5
+				move_and_slide((dir / dist) * (_vel * 0.5))
+				_frame_timer += delta
+				if _frame_timer >= 1.0 / (FPS_ANIM * 0.5):
+					_frame_timer -= 1.0 / (FPS_ANIM * 0.5)
+					_frame_atual = (_frame_atual + 1) % N_FRAMES
+					if _sprite: _sprite.frame = _frame_atual
+					if _sprite_topo: _sprite_topo.frame = _frame_atual
+			else:
+				if _sprite: _sprite.frame = 0
+				if _sprite_topo: _sprite_topo.frame = 0
+				_desvio_idle = Vector2.ZERO
+		else:
+			if _sprite: _sprite.frame = 0
+			if _sprite_topo: _sprite_topo.frame = 0
 		return
 
 	if _idx >= _wps.size():
@@ -263,3 +301,18 @@ func _physics_process(delta: float) -> void:
 			_sprite.frame = _frame_atual
 		if _sprite_topo:
 			_sprite_topo.frame = _frame_atual
+
+
+func _tocar_som_morte() -> void:
+	var stream = load("res://assets/sons/morte_mulher.mp3")
+	if not stream:
+		return
+	if "loop" in stream:
+		stream.loop = false
+	var som = AudioStreamPlayer2D.new()
+	som.stream = stream
+	som.volume_db = 2.0
+	som.global_position = global_position
+	som.connect("finished", som, "queue_free")
+	get_tree().current_scene.add_child(som)
+	som.play()

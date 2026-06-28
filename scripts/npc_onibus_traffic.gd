@@ -81,8 +81,14 @@ const PASSO_INTERPOLACAO = 280.0   # px máximos entre waypoints consecutivos
 
 func _to_wps(pontos: Array) -> PoolVector2Array:
 	var bruto = PoolVector2Array()
+	var traffic = get_parent().get_node_or_null("NpcTraffic")
+	var ruas = traffic._ruas_carro if (traffic and "_ruas_carro" in traffic) else []
+
 	for p in pontos:
-		bruto.append(Vector2(p[0] * ESCALA, p[1] * ESCALA))
+		var pos = Vector2(p[0] * ESCALA, p[1] * ESCALA)
+		if not ruas.empty():
+			pos = _ajustar_ponto_na_rua(pos, ruas)
+		bruto.append(pos)
 	return _interpolar(bruto)
 
 
@@ -176,3 +182,26 @@ func _on_fim_onibus(onibus, linha_idx: int, era_ida: bool) -> void:
 	onibus.disconnect("chegou_ao_fim", self, "_on_fim_onibus")
 	onibus.inicializar(wps, par, 0)
 	onibus.connect("chegou_ao_fim", self, "_on_fim_onibus", [onibus, linha_idx, proxima_ida])
+
+
+# ── Alinhamento de Rota GPS à Rede de Vias ────────────────────────────────────
+
+func _ajustar_ponto_na_rua(p: Vector2, ruas: Array) -> Vector2:
+	var melhor_p = p
+	var melhor_dist = 999999.0
+	for rua in ruas:
+		var wps = rua["wps"]
+		for i in range(1, wps.size()):
+			var s1 = wps[i - 1]
+			var s2 = wps[i]
+			var pt = Geometry.get_closest_point_to_segment_2d(p, s1, s2)
+			var dist = p.distance_squared_to(pt)
+			if dist < melhor_dist:
+				melhor_dist = dist
+				melhor_p = pt
+				
+	# Só ajusta se a rua estiver dentro de um raio de 450 pixels (~30m)
+	# para evitar saltos bruscos se o traçado GPS estiver fora da rede de ruas
+	if melhor_dist < 450.0 * 450.0:
+		return melhor_p
+	return p

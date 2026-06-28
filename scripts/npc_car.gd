@@ -4,11 +4,51 @@
 extends KinematicBody2D
 
 const DIST_WP   = 50.0
-const TEX_CARRO = preload("res://assets/carros/SP_021.png")
+
+const MODELOS = [
+	{
+		"nome": "Sedan",
+		"textura": preload("res://assets/carros/SP_021.png"),
+		"max_speed": 774.0,
+		"engine_power": 650.0,
+		"braking": 550.0,
+		"grip_normal": 4.8,
+		"grip_drift": 0.5,
+		"vel_mult": 1.0
+	},
+	{
+		"nome": "Sports",
+		"textura": preload("res://assets/carros/SP_029.png"),
+		"max_speed": 980.0,
+		"engine_power": 950.0,
+		"braking": 700.0,
+		"grip_normal": 3.8,
+		"grip_drift": 0.4,
+		"vel_mult": 1.25
+	},
+	{
+		"nome": "Heavy",
+		"textura": preload("res://assets/carros/SP_038.png"),
+		"max_speed": 650.0,
+		"engine_power": 480.0,
+		"braking": 400.0,
+		"grip_normal": 6.0,
+		"grip_drift": 0.8,
+		"vel_mult": 0.78
+	},
+	{
+		"nome": "Compact",
+		"textura": preload("res://assets/carros/SP_043.png"),
+		"max_speed": 820.0,
+		"engine_power": 750.0,
+		"braking": 600.0,
+		"grip_normal": 5.2,
+		"grip_drift": 0.6,
+		"vel_mult": 1.05
+	}
+]
 
 # Detecção de veículo à frente
-const DIST_FRENTE_MAX = 160.0   # começa a desacelerar a esta distância
-const DIST_FRENTE_MIN = 60.0    # distância mínima (abaixo = para)
 const CONE_FRENTE     = 0.92    # cos(~23°) — cone estreito: ignora cruzamentos
 
 # Despawn por travamento: se mover < STUCK_DIST2 px em STUCK_TEMPO s → despawn
@@ -43,8 +83,10 @@ var _terminado:   bool  = false
 var _pos_check:   Vector2 = Vector2.ZERO
 var _check_timer: float   = 0.0
 var _stuck_t:     float   = 0.0
-var _fator_cache: float   = 1.0
+var _fator_cache: float = 1.0
 var _fator_tick:  int     = 0
+var modelo_idx:   int     = 0
+var _sensor_peds: Area2D  = null
 
 signal chegou_ao_fim
 
@@ -52,13 +94,21 @@ signal chegou_ao_fim
 func _ready() -> void:
 	add_to_group("npc_carros")
 
+	modelo_idx = randi() % MODELOS.size()
+	var modelo = MODELOS[modelo_idx]
+
 	var v = Polygon2D.new()
-	v.texture  = TEX_CARRO
+	v.name = "Visual"
+	v.texture  = modelo["textura"]
 	v.polygon  = POLIGONO
 	v.position = Vector2(73.5, 150.0)
 	v.rotation = PI
 	v.scale    = Vector2(2.037, 1.944)
-	v.color    = CORES[randi() % CORES.size()]
+	
+	if modelo_idx == 3 and randf() < 0.5:
+		v.color = Color(0.95, 0.82, 0.08) # Amarelo Táxi
+	else:
+		v.color = CORES[randi() % CORES.size()]
 	add_child(v)
 
 	var shape = RectangleShape2D.new()
@@ -68,6 +118,18 @@ func _ready() -> void:
 	col.position = Vector2(37.5, 82.0)
 	add_child(col)
 
+	# Cria o sensor físico de pedestres (otimizado no C++ do motor)
+	_sensor_peds = Area2D.new()
+	_sensor_peds.collision_layer = 0
+	_sensor_peds.collision_mask  = 8 # Camada 4: Pedestres e Player
+	var s_shape = RectangleShape2D.new()
+	s_shape.extents = Vector2(22.0, 80.0) # Largura 44px, comprimento 160px
+	var s_col = CollisionShape2D.new()
+	s_col.shape = s_shape
+	s_col.position = Vector2(37.5, -56.0) # Centralizado em frente ao parachoque
+	_sensor_peds.add_child(s_col)
+	add_child(_sensor_peds)
+
 	collision_layer = 2
 	collision_mask  = 3
 	z_index = 5
@@ -76,6 +138,12 @@ func _ready() -> void:
 func inicializar(wps: PoolVector2Array, vel: float, start: int = 0) -> void:
 	_wps       = wps
 	_vel       = vel
+	_fator_cache = 1.0
+	_fator_tick  = 0
+	
+	var modelo = MODELOS[modelo_idx]
+	_vel         = vel * modelo["vel_mult"]
+	
 	_terminado = false
 	_stuck_t     = 0.0
 	_check_timer = 0.0
@@ -152,19 +220,56 @@ func _fator_proximidade() -> float:
 	_fator_tick = (_fator_tick + 1) % 3
 	if _fator_tick != 0:
 		return _fator_cache
+
 	var fwd = -transform.y
 	var melhor: float = 1.0
-	for outro in get_tree().get_nodes_in_group("npc_carros"):
+
+	# Busca todos os tipos de veículos para evitar colisões
+	var outros = get_tree().get_nodes_in_group("npc_carros") + \
+	             get_tree().get_nodes_in_group("npc_onibus") + \
+	             get_tree().get_nodes_in_group("player_car")
+
+	for outro in outros:
 		if outro == self or not is_instance_valid(outro):
 			continue
+
 		var delta_pos = outro.position - position
 		var dist = delta_pos.length()
-		if dist > DIST_FRENTE_MAX:
+
+		# Comprimento dinâmico baseado no tipo de veículo (para distância de colisão origin-to-origin)
+		var half_len_outro = 58.0
+		if outro.is_in_group("npc_onibus"):
+			half_len_outro = 124.0
+		elif outro.is_in_group("player_car"):
+			half_len_outro = 61.0
+
+		var dist_min = 58.0 + half_len_outro + 35.0  # 35px de margem de segurança bumper-to-bumper
+		var dist_max = dist_min + 200.0              # zona de desaceleração suave de 200px
+
+		if dist > dist_max:
 			continue
 		if fwd.dot(delta_pos / dist) < CONE_FRENTE:
 			continue
-		var f = (dist - DIST_FRENTE_MIN) / (DIST_FRENTE_MAX - DIST_FRENTE_MIN)
+
+		var f = (dist - dist_min) / (dist_max - dist_min)
 		if f < melhor:
 			melhor = f
+
+	# Evita atropelamento de pedestres e do Player a pé usando o Area2D (O(1) no script)
+	if is_instance_valid(_sensor_peds):
+		for ped in _sensor_peds.get_overlapping_bodies():
+			if not is_instance_valid(ped) or ped.get("no_onibus") or ped.get("_morto"):
+				continue
+
+			var delta_pos = ped.position - position
+			var dist = delta_pos.length()
+
+			var dist_min = 58.0 + 10.0 + 35.0  # 58px (carro) + 10px (pedestre) + 35px margem
+			var dist_max = dist_min + 140.0
+
+			var f = (dist - dist_min) / (dist_max - dist_min)
+			if f < melhor:
+				melhor = f
+
 	_fator_cache = clamp(melhor, 0.0, 1.0)
 	return _fator_cache

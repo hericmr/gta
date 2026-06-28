@@ -307,8 +307,8 @@ input[type=range] {
         <div class="row2">
           <label>Cor de fundo</label>
           <div style="display:flex; align-items:center; gap:6px;">
-            <button class="color-btn" id="bg-btn" style="background:#111111"></button>
-            <input type="color" id="bg-color" value="#111111">
+            <button class="color-btn" id="bg-btn" style="background:#24292e"></button>
+            <input type="color" id="bg-color" value="#24292e">
           </div>
         </div>
         <div class="row2">
@@ -320,8 +320,8 @@ input[type=range] {
         </div>
         <div class="slider-row" style="margin-top:4px;">
           <label>Calçada extra</label>
-          <input type="range" id="calçada-extra" min="0" max="10" step="0.5" value="2">
-          <span id="calçada-extra-val">2.0</span>
+          <input type="range" id="calçada-extra" min="0" max="10" step="0.5" value="3.5">
+          <span id="calçada-extra-val">3.5</span>
         </div>
       </div>
     </div>
@@ -364,12 +364,12 @@ const FEATURES = [
 
 // ── Categorias de via ─────────────────────────────────────────────────────────
 const CATEGORIAS = [
-  { id: 'rodovia',   label: 'Rodovia',       sub: 'largura ≥ 11',  minL: 11, maxL: 99,  cor: '#e8d060', alfa: 0.90, mult: 1.4, calçada: true  },
-  { id: 'avenida',   label: 'Avenida',        sub: 'largura 7–10',  minL: 7,  maxL: 10,  cor: '#d4a030', alfa: 0.75, mult: 1.1, calçada: true  },
-  { id: 'coletora',  label: 'Coletora',       sub: 'largura 6',     minL: 6,  maxL: 6,   cor: '#888888', alfa: 0.55, mult: 1.0, calçada: true  },
-  { id: 'rua',       label: 'Rua',            sub: 'largura 4–5',   minL: 4,  maxL: 5,   cor: '#666666', alfa: 0.45, mult: 0.9, calçada: false },
-  { id: 'local',     label: 'Rua Local',      sub: 'largura 3',     minL: 3,  maxL: 3,   cor: '#444444', alfa: 0.35, mult: 0.85,calçada: false },
-  { id: 'viela',     label: 'Viela',          sub: 'largura ≤ 2',   minL: 0,  maxL: 2,   cor: '#2a2a2a', alfa: 0.25, mult: 0.7, calçada: false },
+  { id: 'rodovia',   label: 'Rodovia',       sub: 'largura ≥ 11',  minL: 11, maxL: 99,  cor: '#e8d161', alfa: 1.00, mult: 1.40, calçada: true },
+  { id: 'avenida',   label: 'Avenida',        sub: 'largura 7–10',  minL: 7,  maxL: 10,  cor: '#000000', alfa: 1.00, mult: 1.55, calçada: true },
+  { id: 'coletora',  label: 'Coletora',       sub: 'largura 6',     minL: 6,  maxL: 6,   cor: '#000000', alfa: 1.00, mult: 1.00, calçada: true },
+  { id: 'rua',       label: 'Rua',            sub: 'largura 4–5',   minL: 4,  maxL: 5,   cor: '#000000', alfa: 1.00, mult: 1.90, calçada: true },
+  { id: 'ciclovia',  label: 'Ciclovia',       sub: 'largura 3',     minL: 3,  maxL: 3,   cor: '#ad422d', alfa: 1.00, mult: 1.50, calçada: true },
+  { id: 'viela',     label: 'Viela',          sub: 'largura ≤ 2',   minL: 0,  maxL: 2,   cor: '#ffffff', alfa: 1.00, mult: 3.00, calçada: true },
 ];
 
 // ── Estado ────────────────────────────────────────────────────────────────────
@@ -379,9 +379,9 @@ let dadosFeatures = null;
 let cam = { x: 0, y: 0, zoom: 1 };
 let pan = { dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 };
 
-let bgColor = '#111111';
+let bgColor = '#24292e';
 let calçadaColor = '#1e1e1e';
-let calçadaExtra = 2.0;
+let calçadaExtra = 3.5;
 
 // ── Canvas ────────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('c');
@@ -896,7 +896,7 @@ function atualizarEstatisticas() {
 // ── Exportar GDScript ─────────────────────────────────────────────────────────
 document.getElementById('btn-export').onclick = () => {
   const linhas = [];
-  linhas.push('# Cole em world_osm.gd — substitui _criar_ruas_visual()');
+  linhas.push('# Cole em world_osm.gd — substitui _criar_ruas_visual() e funções auxiliares');
   linhas.push('');
   linhas.push('func _criar_ruas_visual():');
   linhas.push('\t# Calçadas (largura aumentada)');
@@ -913,7 +913,8 @@ document.getElementById('btn-export').onclick = () => {
   linhas.push('\t\tcalcada.joint_mode = Line2D.LINE_JOINT_ROUND');
   linhas.push('\t\tcalcada.begin_cap_mode = Line2D.LINE_CAP_ROUND');
   linhas.push('\t\tcalcada.end_cap_mode = Line2D.LINE_CAP_ROUND');
-  linhas.push('\t\tcalcada.z_index = -1');
+  linhas.push('\t\tcalcada.round_precision = 32');
+  linhas.push('\t\tcalcada.z_index = _z_rua(largura) - 30');
   linhas.push('\t\tadd_child(calcada)');
   linhas.push('');
   linhas.push('\t# Ruas');
@@ -923,15 +924,39 @@ document.getElementById('btn-export').onclick = () => {
   linhas.push('\t\tvar pts = PoolVector2Array()');
   linhas.push('\t\tfor p in rua["pontos"]: pts.append(Vector2(p[0], p[1]))');
   linhas.push('\t\tlinha.points = pts');
-  linhas.push('\t\tlinha.default_color = _cor_rua(largura)');
+  linhas.push('\t\tif largura <= 3:');
+  linhas.push('\t\t\tlinha.texture = _obter_textura_viela_procedural()');
+  linhas.push('\t\t\tlinha.texture_mode = Line2D.LINE_TEXTURE_TILE');
+  linhas.push('\t\t\tif largura == 3:');
+  linhas.push('\t\t\t\tlinha.default_color = Color(0.68, 0.26, 0.18, 1.00)');
+  linhas.push('\t\t\telse:');
+  linhas.push('\t\t\t\tlinha.default_color = Color(1.00, 1.00, 1.00, 1.00)');
+  linhas.push('\t\telse:');
+  linhas.push('\t\t\tlinha.default_color = _cor_rua(largura)');
   linhas.push('\t\tlinha.width = _mult_rua(largura) * largura');
   linhas.push('\t\tlinha.joint_mode = Line2D.LINE_JOINT_ROUND');
   linhas.push('\t\tlinha.begin_cap_mode = Line2D.LINE_CAP_ROUND');
   linhas.push('\t\tlinha.end_cap_mode = Line2D.LINE_CAP_ROUND');
+  linhas.push('\t\tlinha.round_precision = 32');
+  linhas.push('\t\tlinha.z_index = _z_rua(largura) - 24');
   linhas.push('\t\tadd_child(linha)');
   linhas.push('');
+  linhas.push('\t\tif largura >= 7 or largura == 3:');
+  linhas.push('\t\t\tvar faixa = Line2D.new()');
+  linhas.push('\t\t\tfaixa.points = pts');
+  linhas.push('\t\t\tfaixa.default_color = Color(1.0, 1.0, 1.0, 0.85)');
+  linhas.push('\t\t\tfaixa.width = 0.10 if largura == 3 else 0.15');
+  linhas.push('\t\t\tfaixa.texture = _obter_textura_pontilhada()');
+  linhas.push('\t\t\tfaixa.texture_mode = Line2D.LINE_TEXTURE_TILE');
+  linhas.push('\t\t\tfaixa.joint_mode = Line2D.LINE_JOINT_ROUND');
+  linhas.push('\t\t\tfaixa.begin_cap_mode = Line2D.LINE_CAP_ROUND');
+  linhas.push('\t\t\tfaixa.end_cap_mode = Line2D.LINE_CAP_ROUND');
+  linhas.push('\t\t\tfaixa.round_precision = 32');
+  linhas.push('\t\t\tfaixa.z_index = linha.z_index + 1');
+  linhas.push('\t\t\tadd_child(faixa)');
+  linhas.push('');
   linhas.push('func _largura_calcada(largura: float, extra: float) -> float:');
-  CATEGORIAS.filter(c => c.calçada).forEach(c => {
+  CATEGORIAS.forEach(c => {
     const cond = c.minL === 0 ? `largura <= ${c.maxL}` :
                  c.maxL === 99 ? `largura >= ${c.minL}` :
                  c.minL === c.maxL ? `largura == ${c.minL}` :
@@ -949,7 +974,7 @@ document.getElementById('btn-export').onclick = () => {
                  `largura >= ${c.minL} and largura <= ${c.maxL}`;
     linhas.push(`\tif ${cond}: return Color(${r}, ${g}, ${b}, ${c.alfa.toFixed(2)})`);
   });
-  linhas.push('\treturn Color(0.3, 0.3, 0.3, 0.3)');
+  linhas.push('\treturn Color(0.3, 0.3, 0.3, 1.0)');
   linhas.push('');
   linhas.push('func _mult_rua(largura: float) -> float:');
   CATEGORIAS.forEach(c => {
@@ -960,6 +985,14 @@ document.getElementById('btn-export').onclick = () => {
     linhas.push(`\tif ${cond}: return ${c.mult.toFixed(2)}`);
   });
   linhas.push('\treturn 1.0');
+  linhas.push('');
+  linhas.push('func _z_rua(largura: float) -> int:');
+  linhas.push('\tif largura >= 11: return 5');
+  linhas.push('\tif largura >= 7 and largura <= 10: return 4');
+  linhas.push('\tif largura == 6: return 3');
+  linhas.push('\tif largura >= 4 and largura <= 5: return 2');
+  linhas.push('\tif largura == 3: return 1');
+  linhas.push('\treturn 0');
 
   const code = linhas.join('\n');
   document.getElementById('code-out').textContent = code;

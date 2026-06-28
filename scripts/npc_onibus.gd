@@ -8,17 +8,16 @@ const BRAKING_POWER   = 110.0
 
 # Thresholds de waypoint / parada
 const DIST_WP           = 80.0
-const DIST_INICIO_FREAR = 1600.0  # v²/2a = 560²/220 ≈ 1425 px → margem extra
 const DIST_PARADO       = 180.0   # raio generoso: GPS não é preciso ao metro
 const ESPERA_PARADA_MIN = 3.0
 const ESPERA_PARADA_MAX = 6.0
 
 # Embarque / desembarque
-const RAIO_EMBARQUE    = 180.0   # raio para embarcar pedestres
-const RAIO_CHAMADA     = 500.0   # raio para chamar pedestres esperando no ponto
-const MAX_PASSAGEIROS  = 30      # lotação máxima
-const PROB_EMBARQUE    = 0.65    # chance de um pedestre próximo embarcar
-const PROB_DESEMBARQUE = 0.45    # chance de desembarcar em cada parada
+const RAIO_EMBARQUE    = 240.0   # raio para embarcar pedestres
+const RAIO_CHAMADA     = 650.0   # raio para chamar pedestres esperando no ponto
+const MAX_PASSAGEIROS  = 50      # lotação máxima
+const PROB_EMBARQUE    = 0.90    # chance de um pedestre próximo embarcar
+const PROB_DESEMBARQUE = 0.65    # chance de desembarcar em cada parada
 const OFFSET_SAIDA     = 70.0    # distância lateral ao sair do ônibus
 
 const _TEX_PATH = "res://assets/carros/SP_013.png"
@@ -36,6 +35,9 @@ var _passageiros:  Array   = []
 var _pos_check:    Vector2 = Vector2.ZERO   # posição amostrada periodicamente
 var _check_timer:  float   = 0.0
 var _stuck_t:      float   = 0.0
+var _fator_tick:   int     = 0
+var _fator_cache:  float   = 1.0
+var _sensor_peds:  Area2D  = null
 const STUCK_INTERVALO  = 3.0      # amostra posição a cada 3 s
 const STUCK_MIN_DIST   = 200.0    # deve mover ao menos 200 px em 3 s para não ser stuck
 const STUCK_LIMITE     = 9.0      # após 9 s parado → despawn (3 intervalos)
@@ -50,6 +52,18 @@ func _ready() -> void:
 	z_index = 5
 	_criar_visual()
 	_criar_colisao()
+
+	# Cria o sensor físico de pedestres (otimizado no C++ do motor)
+	_sensor_peds = Area2D.new()
+	_sensor_peds.collision_layer = 0
+	_sensor_peds.collision_mask  = 8 # Camada 4: Pedestres e Player
+	var s_shape = RectangleShape2D.new()
+	s_shape.extents = Vector2(50.0, 110.0) # Largura 100px, comprimento 220px
+	var s_col = CollisionShape2D.new()
+	s_col.shape = s_shape
+	s_col.position = Vector2(0.0, -234.0) # Centralizado em frente ao parachoque dianteiro (origin a partir do centro)
+	_sensor_peds.add_child(s_col)
+	add_child(_sensor_peds)
 
 
 func _criar_visual() -> void:
@@ -115,29 +129,7 @@ func _proximo_eh_parada() -> bool:
 	return _paradas_idx.has(_idx)
 
 
-func _tick_dirigindo(delta: float) -> void:
-	if _idx >= _wps.size():
-		if not _terminado:
-			_terminado = true
-			emit_signal("chegou_ao_fim")
-		return
-
-	var diff = _wps[_idx] - position
-	var dist = diff.length()
-
-	if _proximo_eh_parada() and dist < DIST_INICIO_FREAR:
-		_estado = Estado.FREANDO_PARADA
-		return
-
-	if dist < DIST_WP:
-		_idx += 1
-		return
-
-	rotation = atan2(diff.y, diff.x) + PI * 0.5
-	_speed   = move_toward(_speed, MAX_SPEED, ENGINE_POWER * delta)
-	move_and_slide(-transform.y * _speed)
-
-	# Despawn por travamento: verifica deslocamento a cada STUCK_INTERVALO segundos
+func _verificar_stuck(delta: float) -> void:
 	_check_timer += delta
 	if _check_timer >= STUCK_INTERVALO:
 		var moveu = position.distance_to(_pos_check)
@@ -153,6 +145,35 @@ func _tick_dirigindo(delta: float) -> void:
 		_check_timer = 0.0
 
 
+func _tick_dirigindo(delta: float) -> void:
+	if _idx >= _wps.size():
+		if not _terminado:
+			_terminado = true
+			emit_signal("chegou_ao_fim")
+		return
+
+	var diff = _wps[_idx] - position
+	var dist = diff.length()
+
+	# Distância de frenagem dinâmica baseada na velocidade física real + margem
+	var braking_dist = (_speed * _speed) / (2.0 * BRAKING_POWER) + 250.0
+	if _proximo_eh_parada() and dist < braking_dist:
+		_estado = Estado.FREANDO_PARADA
+		return
+
+	if dist < DIST_WP:
+		_idx += 1
+		return
+
+	rotation = atan2(diff.y, diff.x) + PI * 0.5
+	var proximity_factor = _fator_proximidade()
+	var target_vel = MAX_SPEED * proximity_factor
+	_speed   = move_toward(_speed, target_vel, (BRAKING_POWER * 2.0 if proximity_factor < 0.2 else ENGINE_POWER) * delta)
+	move_and_slide(-transform.y * _speed)
+
+	_verificar_stuck(delta)
+
+
 func _tick_freando(delta: float) -> void:
 	if _idx >= _wps.size():
 		_estado = Estado.DIRIGINDO
@@ -162,41 +183,64 @@ func _tick_freando(delta: float) -> void:
 	var dist = diff.length()
 
 	rotation = atan2(diff.y, diff.x) + PI * 0.5
-	_speed   = move_toward(_speed, 0.0, BRAKING_POWER * delta)
+	
+	# Desaceleração física progressiva em direção ao ponto
+	var target_vel = sqrt(2.0 * BRAKING_POWER * max(0.0, dist - 30.0))
+	var proximity_factor = _fator_proximidade()
+	target_vel = min(target_vel, MAX_SPEED * proximity_factor)
+	_speed = move_toward(_speed, target_vel, (BRAKING_POWER * 2.0 if proximity_factor < 0.2 else BRAKING_POWER) * delta)
+	
 	if _speed > 2.0:
 		move_and_slide(-transform.y * _speed)
 
-	# Chega à parada por proximidade OU por velocidade zerada (overshooting)
-	if dist < DIST_PARADO or _speed < 2.0:
+	# Chega à parada SOMENTE se estiver dentro do raio de parada real (sem falsos positivos por tráfego)
+	if dist < DIST_PARADO:
 		_speed      = 0.0
 		_estado     = Estado.PARADO_PONTO
 		_wait_timer = lerp(ESPERA_PARADA_MIN, ESPERA_PARADA_MAX, randf())
 		_desembarcar()
 		_chamar_pedestres()
 
+	_verificar_stuck(delta)
+
 
 func _tick_parado(delta: float) -> void:
 	_pos_check   = position   # evita stuck-detection ao retomar movimento
 	_check_timer = 0.0
 	_stuck_t     = 0.0
+
+	# Tenta embarcar pedestres que chegarem perto a cada frame
+	_embarcar()
+
 	_wait_timer -= delta
 	if _wait_timer <= 0.0:
-		_embarcar()      # novos passageiros sobem antes de partir
+		# Verifica se ainda há algum pedestre próximo vindo em direção ao ônibus
+		var alguem_vindo = false
+		for ped in get_tree().get_nodes_in_group("pedestres"):
+			if is_instance_valid(ped) and not ped._morto:
+				if not ped._esperando_onibus and global_position.distance_to(ped.global_position) < 380.0:
+					alguem_vindo = true
+					break
+		
+		# Estende a espera por até 3 segundos adicionais se houver pedestres a caminho
+		if alguem_vindo and _wait_timer > -3.0:
+			return
+
 		_idx   += 1
 		_estado = Estado.DIRIGINDO
 
 
-# ── Embarque ─────────────────────────────────────────────────────────────────
+# ── Emplaque ─────────────────────────────────────────────────────────────────
 
 func _chamar_pedestres() -> void:
 	for ped in get_tree().get_nodes_in_group("pedestres"):
-		if not is_instance_valid(ped) or ped.get("_morto"):
+		if not is_instance_valid(ped) or ped._morto:
 			continue
-		if not ped.get("_esperando_onibus"):
+		if not ped._esperando_onibus:
 			continue
-		if position.distance_to(ped.position) > RAIO_CHAMADA:
+		if global_position.distance_to(ped.global_position) > RAIO_CHAMADA:
 			continue
-		ped.caminhar_para(position)
+		ped.caminhar_para(global_position)
 
 
 func _embarcar() -> void:
@@ -206,9 +250,9 @@ func _embarcar() -> void:
 	for ped in get_tree().get_nodes_in_group("pedestres"):
 		if not is_instance_valid(ped):
 			continue
-		if ped.get("_morto"):
+		if ped._morto:
 			continue
-		if position.distance_to(ped.position) > RAIO_EMBARQUE:
+		if global_position.distance_to(ped.global_position) > RAIO_EMBARQUE:
 			continue
 		if randf() > PROB_EMBARQUE:
 			continue
@@ -216,6 +260,7 @@ func _embarcar() -> void:
 		ped.set_physics_process(false)
 		ped.collision_layer     = 0
 		ped.collision_mask      = 0
+		ped.no_onibus           = true
 		_passageiros.append(ped)
 		if _passageiros.size() >= MAX_PASSAGEIROS:
 			break
@@ -238,6 +283,9 @@ func _desembarcar() -> void:
 			ped.set_physics_process(true)
 			ped.collision_layer = 8
 			ped.collision_mask  = 1
+			ped.no_onibus       = false
+			ped.recem_desembarcado = true
+			ped.emit_signal("chegou_ao_fim")
 		else:
 			restantes.append(ped)
 	_passageiros = restantes
@@ -252,4 +300,66 @@ func _liberar_todos_passageiros() -> void:
 		ped.set_physics_process(true)
 		ped.collision_layer = 8
 		ped.collision_mask  = 1
+		ped.no_onibus       = false
+		ped.emit_signal("chegou_ao_fim")
 	_passageiros = []
+
+
+# ── Detecção de Proximidade e Prevenção de Atropelamento ──────────────────────
+
+func _fator_proximidade() -> float:
+	_fator_tick = (_fator_tick + 1) % 3
+	if _fator_tick != 0:
+		return _fator_cache
+
+	var fwd = -transform.y
+	var melhor: float = 1.0
+
+	# 1. Busca todos os tipos de veículos para evitar colisões
+	var outros = get_tree().get_nodes_in_group("npc_carros") + \
+				 get_tree().get_nodes_in_group("npc_onibus") + \
+				 get_tree().get_nodes_in_group("player_car")
+
+	for outro in outros:
+		if outro == self or not is_instance_valid(outro):
+			continue
+
+		var delta_pos = outro.position - position
+		var dist = delta_pos.length()
+
+		var half_len_outro = 58.0
+		if outro.is_in_group("npc_onibus"):
+			half_len_outro = 124.0
+		elif outro.is_in_group("player_car"):
+			half_len_outro = 61.0
+
+		var dist_min = 124.0 + half_len_outro + 40.0
+		var dist_max = dist_min + 250.0
+
+		if dist > dist_max:
+			continue
+		if fwd.dot(delta_pos / dist) < 0.92: # Cone de visão à frente
+			continue
+
+		var f = (dist - dist_min) / (dist_max - dist_min)
+		if f < melhor:
+			melhor = f
+
+	# 2. Evita atropelamento de pedestres e do Player a pé usando Area2D (O(1) no script)
+	if is_instance_valid(_sensor_peds):
+		for ped in _sensor_peds.get_overlapping_bodies():
+			if not is_instance_valid(ped) or ped.get("no_onibus") or ped.get("_morto"):
+				continue
+
+			var delta_pos = ped.position - position
+			var dist = delta_pos.length()
+
+			var dist_min = 124.0 + 10.0 + 40.0  # 124px (ônibus) + 10px (pedestre) + 40px margem
+			var dist_max = dist_min + 180.0
+
+			var f = (dist - dist_min) / (dist_max - dist_min)
+			if f < melhor:
+				melhor = f
+
+	_fator_cache = clamp(melhor, 0.0, 1.0)
+	return _fator_cache

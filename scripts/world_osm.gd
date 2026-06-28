@@ -28,6 +28,7 @@ const COR_BORDA   = Color(0.10, 0.08, 0.06, 0.85)
 
 var _dados        = null   # santos.json
 var _dados_2p5d   = null   # santos_predios_godot.json
+var _tex_pontilhado = null
 var _corpo_global = null   # StaticBody2D de fallback (não usada para prédios lazy)
 var _predios_dinamicos: Array = []  # [{pool, wall_px, centro, roof, quads}] carregados
 var _ruas_nomeadas:     Array = []  # [{nome, pts: PoolVector2Array}]
@@ -65,7 +66,7 @@ func _ready():
 		_fetch_2p5d()
 		_fetch_features()
 	else:
-		_carregar_satelite()
+		_fundo_fallback()
 		_carregar_json()
 		_carregar_2p5d()
 		_carregar_features()
@@ -292,24 +293,6 @@ func _on_json_carregado(result, code, _headers, body):
 	_verificar_html5_pronto()
 
 func _fetch_meta():
-	var req = HTTPRequest.new()
-	add_child(req)
-	req.connect("request_completed", self, "_on_meta_carregado")
-	if req.request(URL_META) != OK:
-		_html5_meta_ok = true
-		_verificar_html5_pronto()
-
-func _on_meta_carregado(result, code, _headers, body):
-	if result == OK and code == 200:
-		var meta = parse_json(body.get_string_from_utf8())
-		if meta:
-			var stream = load("res://scripts/satelite_stream.gd").new()
-			stream.inicializar(null, meta, URL_BASE + "/assets/tiles/")
-			add_child(stream)
-			set_meta("satelite_stream", stream)
-			print("[WorldOSM] Satélite pronto (HTML5, zoom %d)" % meta["zoom"])
-	else:
-		print("[WorldOSM] meta.json não carregado — sem satélite")
 	_html5_meta_ok = true
 	_verificar_html5_pronto()
 
@@ -422,7 +405,8 @@ func _fundo_fallback():
 		Vector2(-1000, -1000), Vector2(10000, -1000),
 		Vector2(10000, 16000), Vector2(-1000, 16000)
 	])
-	bg.color = Color(0.18, 0.38, 0.65)
+	bg.color = Color(0.14, 0.16, 0.18)
+	bg.z_index = -50
 	add_child(bg)
 
 func _z_rua(largura: float) -> int:
@@ -447,18 +431,20 @@ func _criar_ruas_visual():
 	# Calçadas (largura aumentada)
 	for rua in ruas_ordenadas:
 		var largura = float(rua["largura"])
-		var cor_calcada = Color(1.00, 0.86, 0.86)
-		var extra = 10.0
+		var extra = 3.5
 		var calcada = Line2D.new()
 		var pts = PoolVector2Array()
 		for p in rua["pontos"]: pts.append(Vector2(p[0], p[1]))
 		calcada.points = pts
-		calcada.default_color = cor_calcada
+		calcada.texture = _obter_textura_pedra_portuguesa()
+		calcada.texture_mode = Line2D.LINE_TEXTURE_TILE
+		calcada.default_color = Color(1.0, 1.0, 1.0, 0.90) # Preserva o brilho e opacidade da textura
 		calcada.width = _largura_calcada(largura, extra)
 		calcada.joint_mode = Line2D.LINE_JOINT_ROUND
 		calcada.begin_cap_mode = Line2D.LINE_CAP_ROUND
 		calcada.end_cap_mode = Line2D.LINE_CAP_ROUND
-		calcada.z_index = _z_rua(largura) * 2 - 30
+		calcada.round_precision = 32
+		calcada.z_index = _z_rua(largura) - 30
 		add_child(calcada)
 
 	# Ruas
@@ -468,13 +454,40 @@ func _criar_ruas_visual():
 		var pts = PoolVector2Array()
 		for p in rua["pontos"]: pts.append(Vector2(p[0], p[1]))
 		linha.points = pts
-		linha.default_color = _cor_rua(largura)
+		# Se for viela ou ciclovia (largura <= 3), aplica textura pixelada lisa
+		if largura <= 3:
+			linha.texture = _obter_textura_viela_procedural()
+			linha.texture_mode = Line2D.LINE_TEXTURE_TILE
+			if largura == 3:
+				linha.default_color = Color(0.68, 0.26, 0.18, 1.00) # vermelho terracota/terroso para ciclovia (largura 3)
+			else:
+				linha.default_color = Color(1.00, 1.00, 1.00, 1.00) # branco/cinza claro para vielas (largura <= 2)
+		else:
+			linha.texture = _obter_textura_asfalto_procedural()
+			linha.texture_mode = Line2D.LINE_TEXTURE_TILE
+			linha.default_color = _cor_rua(largura)
 		linha.width = _mult_rua(largura) * largura
 		linha.joint_mode = Line2D.LINE_JOINT_ROUND
 		linha.begin_cap_mode = Line2D.LINE_CAP_ROUND
 		linha.end_cap_mode = Line2D.LINE_CAP_ROUND
-		linha.z_index = _z_rua(largura) * 2 - 29
+		linha.round_precision = 32
+		linha.z_index = _z_rua(largura) - 24
 		add_child(linha)
+
+		# Se for uma avenida (largura >= 7) ou ciclovia (largura == 3), adiciona faixa central pontilhada branca
+		if largura >= 7 or largura == 3:
+			var faixa = Line2D.new()
+			faixa.points = pts
+			faixa.default_color = Color(1.0, 1.0, 1.0, 0.85)
+			faixa.width = 0.10 if largura == 3 else 0.15
+			faixa.texture = _obter_textura_pontilhada()
+			faixa.texture_mode = Line2D.LINE_TEXTURE_TILE
+			faixa.joint_mode = Line2D.LINE_JOINT_ROUND
+			faixa.begin_cap_mode = Line2D.LINE_CAP_ROUND
+			faixa.end_cap_mode = Line2D.LINE_CAP_ROUND
+			faixa.round_precision = 32
+			faixa.z_index = linha.z_index + 1
+			add_child(faixa)
 
 func _largura_calcada(largura: float, extra: float) -> float:
 	if largura >= 11: return largura * 1.40 + extra * 2
@@ -483,20 +496,20 @@ func _largura_calcada(largura: float, extra: float) -> float:
 	return largura + extra * 2
 
 func _cor_rua(largura: float) -> Color:
-	if largura >= 11: return Color(0.91, 0.82, 0.38, 0.90)
-	if largura >= 7 and largura <= 10: return Color(0.00, 0.00, 0.00, 1.00)
-	if largura == 6: return Color(0.00, 0.00, 0.00, 0.55)
-	if largura >= 4 and largura <= 5: return Color(0.00, 0.00, 0.00, 1.00)
-	if largura == 3: return Color(0.27, 0.27, 0.27, 1.00)
-	if largura <= 2: return Color(0.98, 1.00, 0.75, 1.00)
-	return Color(0.3, 0.3, 0.3, 0.3)
+	if largura >= 11: return Color(0.93, 0.85, 0.48, 1.00)
+	if largura >= 7 and largura <= 10: return Color(0.22, 0.24, 0.26, 1.00)
+	if largura == 6: return Color(0.22, 0.24, 0.26, 1.00)
+	if largura >= 4 and largura <= 5: return Color(0.22, 0.24, 0.26, 1.00)
+	if largura == 3: return Color(0.68, 0.26, 0.18, 1.00)
+	if largura <= 2: return Color(1.00, 1.00, 1.00, 1.00)
+	return Color(0.3, 0.3, 0.3, 1.00)
 
 func _mult_rua(largura: float) -> float:
 	if largura >= 11: return 1.40
 	if largura >= 7 and largura <= 10: return 1.55
 	if largura == 6: return 1.00
 	if largura >= 4 and largura <= 5: return 1.90
-	if largura == 3: return 0.50
+	if largura == 3: return 1.50
 	if largura <= 2: return 3.00
 	return 1.0
 
@@ -606,7 +619,7 @@ func _criar_features(dados: Dictionary) -> void:
 			continue
 		poly.polygon = pts
 		poly.color   = Color(0.12, 0.35, 0.68, 0.70)
-		poly.z_index = -9
+		poly.z_index = -38
 		add_child(poly)
 
 	# Porto/industrial (z=-9, mesmo nível do mar mas adicionado depois → fica na frente)
@@ -619,7 +632,7 @@ func _criar_features(dados: Dictionary) -> void:
 			continue
 		poly.polygon = pts
 		poly.color   = Color(0.38, 0.32, 0.28, 0.75)
-		poly.z_index = -9
+		poly.z_index = -38
 		add_child(poly)
 
 	# Praia — areia (z=-8, adicionada antes do verde → verde (jardins) fica na frente)
@@ -632,11 +645,11 @@ func _criar_features(dados: Dictionary) -> void:
 			continue
 		poly.polygon = pts
 		poly.color   = Color(0.87, 0.82, 0.62, 0.80)
-		poly.z_index = -8
+		poly.z_index = -37
 		add_child(poly)
 
 	# Parques e jardins (z=-8) — textura de grama com tiling
-	var tex_grama = _tex_repetida(TEX_GRAMA_SRC)
+	var tex_grama = _obter_textura_grama_procedural()
 	for f in dados.get("verde", []):
 		var poly = Polygon2D.new()
 		var pts  = PoolVector2Array()
@@ -649,8 +662,8 @@ func _criar_features(dados: Dictionary) -> void:
 		poly.polygon = pts
 		poly.uv      = uvs
 		poly.texture = tex_grama
-		poly.color   = Color(1.0, 1.0, 1.0, 0.92)
-		poly.z_index = -8
+		poly.color   = Color(1.0, 1.0, 1.0, 1.0)
+		poly.z_index = -24
 		add_child(poly)
 
 	# Corpos d'água — polígonos (z=-7)
@@ -663,7 +676,7 @@ func _criar_features(dados: Dictionary) -> void:
 			continue
 		poly.polygon = pts
 		poly.color   = Color(0.18, 0.45, 0.72, 0.85)
-		poly.z_index = -7
+		poly.z_index = -36
 		add_child(poly)
 
 	# Canais — linhas largas (z=-6)
@@ -679,7 +692,7 @@ func _criar_features(dados: Dictionary) -> void:
 		linha.joint_mode     = Line2D.LINE_JOINT_ROUND
 		linha.begin_cap_mode = Line2D.LINE_CAP_ROUND
 		linha.end_cap_mode   = Line2D.LINE_CAP_ROUND
-		linha.z_index        = -6
+		linha.z_index        = -35
 		add_child(linha)
 
 	print("[WorldOSM] Features: mar=%d porto=%d praia=%d verde=%d agua=%d canais=%d" % [
@@ -760,3 +773,161 @@ func atualizar_parallax(pos_jogo: Vector2) -> void:
 			var a = pool[i]
 			var b = pool[(i + 1) % n]
 			quads[i].polygon = PoolVector2Array([a, b, b + offset, a + offset])
+
+
+func _obter_textura_pontilhada() -> Texture:
+	if _tex_pontilhado:
+		return _tex_pontilhado
+	
+	var img = Image.new()
+	# Cria uma imagem de 64x2 pixels para afastar mais as listras (gaps maiores)
+	img.create(64, 2, false, Image.FORMAT_RGBA8)
+	img.lock()
+	for x in range(64):
+		for y in range(2):
+			if x < 16:
+				img.set_pixel(x, y, Color(1, 1, 1, 0.85)) # Tracinho branco (16px)
+			else:
+				img.set_pixel(x, y, Color(1, 1, 1, 0.0))  # Espaço vazio/afastamento (48px)
+	img.unlock()
+	
+	var tex = ImageTexture.new()
+	tex.create_from_image(img, Texture.FLAG_REPEAT)
+	_tex_pontilhado = tex
+	return _tex_pontilhado
+
+
+func _obter_textura_grama_procedural() -> Texture:
+	var img = Image.new()
+	img.create(16, 16, false, Image.FORMAT_RGBA8)
+	img.lock()
+	
+	var rng = RandomNumberGenerator.new()
+	rng.seed = 12345
+	
+	# 1. Pinta o fundo com um verde escuro denso com leve ruído pixelado
+	for x in range(16):
+		for y in range(16):
+			var r = rng.randf()
+			# Tom base de grama verde escuro
+			var base_g = 0.18 + r * 0.05
+			var c = Color(base_g * 0.5, base_g, base_g * 0.5, 1.0)
+			img.set_pixel(x, y, c)
+			
+	# 2. Desenha pequenos tufos de grama em pixel art (verde médio e claro)
+	var cor_tufo_escura = Color(0.12, 0.35, 0.12, 1.0)
+	var cor_tufo_clara  = Color(0.20, 0.52, 0.20, 1.0)
+	
+	# Lista de posições de tufos (x, y) na grade 16x16
+	var tufos = [
+		Vector2(3, 4),
+		Vector2(11, 2),
+		Vector2(6, 11),
+		Vector2(13, 10)
+	]
+	
+	for t in tufos:
+		var tx = int(t.x)
+		var ty = int(t.y)
+		# Desenha a pontinha do tufo (clara)
+		img.set_pixel(tx, ty, cor_tufo_clara)
+		# Desenha a base do tufo (média/escura)
+		img.set_pixel((tx - 1 + 16) % 16, (ty + 1) % 16, cor_tufo_escura)
+		img.set_pixel(tx, (ty + 1) % 16, cor_tufo_escura)
+		img.set_pixel((tx + 1) % 16, (ty + 1) % 16, cor_tufo_escura)
+
+	# 3. Desenha algumas folhas soltas (pontos de 1 pixel verde claro)
+	var folhas = [
+		Vector2(1, 1), Vector2(8, 2), Vector2(14, 5),
+		Vector2(2, 9), Vector2(9, 8), Vector2(5, 14)
+	]
+	for f in folhas:
+		img.set_pixel(int(f.x), int(f.y), cor_tufo_clara)
+		
+	img.unlock()
+	
+	var tex = ImageTexture.new()
+	tex.create_from_image(img, Texture.FLAG_REPEAT) # Sem filtragem para manter o pixel art
+	return tex
+
+
+func _obter_textura_pedra_portuguesa() -> Texture:
+	var img = Image.new()
+	img.create(32, 32, false, Image.FORMAT_RGBA8)
+	img.lock()
+	
+	var rng = RandomNumberGenerator.new()
+	rng.seed = 98765 # Semente fixa para padrão consistente
+	
+	# Gera um mosaico simulando as pedras pretas e brancas assentadas artesanalmente
+	for x in range(32):
+		for y in range(32):
+			# Cria um padrão ondulante suave baseado nas coordenadas para simular os desenhos de Santos
+			var onda = sin(x * 0.4) + cos(y * 0.4)
+			var r = rng.randf()
+			
+			var cor: Color
+			if abs(onda) < 0.45:
+				# Pedras Pretas (com leve variação de cinza para textura mineral)
+				var v = 0.16 + r * 0.08
+				cor = Color(v, v, v, 1.0)
+			else:
+				# Pedras Brancas/Claras (com leve variação de cinza claro/creme)
+				var v = 0.82 + r * 0.10
+				cor = Color(v, v, v - 0.04, 1.0) # levemente creme
+				
+			img.set_pixel(x, y, cor)
+			
+	img.unlock()
+	
+	var tex = ImageTexture.new()
+	tex.create_from_image(img, Texture.FLAG_REPEAT)
+	return tex
+
+
+func _obter_textura_viela_procedural() -> Texture:
+	var img = Image.new()
+	img.create(16, 16, false, Image.FORMAT_RGBA8)
+	img.lock()
+	
+	var rng = RandomNumberGenerator.new()
+	rng.seed = 54321 # semente fixa para consistência
+	
+	# Gera um padrão liso de cinza muito claro (quase branco) pixel art sem divisórias
+	for x in range(16):
+		for y in range(16):
+			var r = rng.randf()
+			# Tom base de cinza bem claro (quase branco): [0.85, 0.95]
+			var base_v = 0.85 + r * 0.10
+			var c = Color(base_v, base_v, base_v, 1.0)
+			img.set_pixel(x, y, c)
+			
+	img.unlock()
+	
+	var tex = ImageTexture.new()
+	tex.create_from_image(img, Texture.FLAG_REPEAT) # Sem filtragem para manter pixel art nítido
+	return tex
+
+
+func _obter_textura_asfalto_procedural() -> Texture:
+	var img = Image.new()
+	img.create(16, 16, false, Image.FORMAT_RGBA8)
+	img.lock()
+	
+	var rng = RandomNumberGenerator.new()
+	rng.seed = 98765 # semente fixa para consistência
+	
+	# Gera um padrão granulado/áspero de asfalto pixel art
+	for x in range(16):
+		for y in range(16):
+			var r = rng.randf()
+			# Tom base de asfalto cinza médio/escuro neut: [0.80, 1.00]
+			var base_v = 0.80 + r * 0.20
+			var c = Color(base_v, base_v, base_v, 1.0)
+			img.set_pixel(x, y, c)
+			
+	img.unlock()
+	
+	var tex = ImageTexture.new()
+	tex.create_from_image(img, Texture.FLAG_REPEAT) # Sem filtragem para manter pixel art nítido
+	return tex

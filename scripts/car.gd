@@ -2,7 +2,7 @@
 extends KinematicBody2D
 
 export var wheel_base:     float = 95.0
-export var steering_angle: float = 25.0   # ângulo máximo das rodas (°)
+export var steering_angle: float = 29.0   # ângulo máximo das rodas (°)
 export var engine_power:   float = 800.0
 export var braking:        float = 450.0
 export var friction:       float = -49.0
@@ -10,13 +10,59 @@ export var drag:           float = -0.01
 export var max_speed_re:   float = 950.0
 export var max_speed:      float = 774.0  # referência para câmera/HUD
 
+export var drift_grip_normal: float = 5.0   # grip padrão (menor = desliza mais)
+export var drift_grip_drift:  float = 1.1   # grip no freio de mão (drift)
+
+const MODELOS = [
+	{
+		"nome": "Sedan",
+		"textura": preload("res://assets/carros/SP_021.png"),
+		"max_speed": 774.0,
+		"engine_power": 650.0,
+		"braking": 550.0,
+		"grip_normal": 4.8,
+		"grip_drift": 0.5,
+		"vel_mult": 1.0
+	},
+	{
+		"nome": "Sports",
+		"textura": preload("res://assets/carros/SP_029.png"),
+		"max_speed": 980.0,
+		"engine_power": 950.0,
+		"braking": 700.0,
+		"grip_normal": 3.8,
+		"grip_drift": 0.4,
+		"vel_mult": 1.25
+	},
+	{
+		"nome": "Heavy",
+		"textura": preload("res://assets/carros/SP_038.png"),
+		"max_speed": 650.0,
+		"engine_power": 480.0,
+		"braking": 400.0,
+		"grip_normal": 6.0,
+		"grip_drift": 0.8,
+		"vel_mult": 0.78
+	},
+	{
+		"nome": "Compact",
+		"textura": preload("res://assets/carros/SP_043.png"),
+		"max_speed": 820.0,
+		"engine_power": 750.0,
+		"braking": 600.0,
+		"grip_normal": 5.2,
+		"grip_drift": 0.6,
+		"vel_mult": 1.05
+	}
+]
+
 const RAIO_ATROPELO    = 35.0
 const VEL_ATROPELO_KMH = 20.0
 const FLASH_DURACAO    = 0.30
 const SHAKE_DECAY      = 80.0
-const LOOK_AHEAD       = 220.0
+const LOOK_AHEAD       = 350.0
 const LOOK_AHEAD_VEL   = 1.5
-const BASE_CAM_LOCAL   = Vector2(407.5, -307.5)
+const BASE_CAM_LOCAL   = Vector2(37.5, -120.0)
 const MAX_MARCAS       = 40
 const LIMIAR_DERRAPA   = 80.0
 const PNEU_ESQ_LOCAL   = Vector2(10, 150)
@@ -60,6 +106,7 @@ func parar() -> void:
 
 func _ready() -> void:
 	_radio.connect("finished", self, "_on_radio_finished")
+	aplicar_modelo(0, Color(0.99, 1.0, 0.0))
 	collision_layer = 2
 	collision_mask  = 3
 	add_to_group("player_car")
@@ -115,12 +162,26 @@ func _get_input() -> void:
 	_steer_dir = steer_dir * deg2rad(steering_angle)
 
 	_acceleration = Vector2.ZERO
+	var acelerando = Input.is_action_pressed("acelerar") or Input.is_action_pressed("ui_up") or Input.is_key_pressed(KEY_W)
+	var freando = Input.is_action_pressed("frear") or Input.is_action_pressed("ui_down") or Input.is_key_pressed(KEY_S)
+
 	if Input.is_key_pressed(KEY_SPACE):
-		_acceleration = -transform.y * (-braking * 2.0)
-	elif Input.is_action_pressed("acelerar") or Input.is_action_pressed("ui_up")   or Input.is_key_pressed(KEY_W):
-		_acceleration = -transform.y * engine_power
-	elif Input.is_action_pressed("frear")    or Input.is_action_pressed("ui_down") or Input.is_key_pressed(KEY_S):
-		_acceleration = -transform.y * (-braking)
+		var current_speed = _velocity.dot(-transform.y)
+		if current_speed > 15.0:
+			_acceleration = -transform.y * (-braking * 2.5) # Freia o movimento frontal
+		elif current_speed < -15.0:
+			_acceleration = -transform.y * (braking * 2.5)  # Freia o movimento de ré
+		elif not acelerando:
+			_velocity = Vector2.ZERO # Só trava parado se não estiver tentando acelerar
+		
+		# Se acelerar enquanto puxa o freio de mão, aplica torque do motor para girar e dar cavalo de pau!
+		if acelerando:
+			_acceleration += -transform.y * engine_power * 1.1
+	else:
+		if acelerando:
+			_acceleration = -transform.y * engine_power
+		elif freando:
+			_acceleration = -transform.y * (-braking)
 
 
 func _apply_friction(delta: float) -> void:
@@ -143,10 +204,25 @@ func _calculate_steering(delta: float) -> void:
 	var new_heading = rear_wheel.direction_to(front_wheel)
 	var d           = new_heading.dot(_velocity.normalized())
 
+	# O grip físico diminui conforme a velocidade aumenta, gerando inércia lateral
+	var vel_rel = clamp(_velocity.length() / max_speed, 0.0, 1.0)
+	var grip_atual = lerp(drift_grip_normal * 2.5, drift_grip_normal, vel_rel)
+
+	# Se pressionar ESPAÇO (freio de mão), o grip cai drasticamente para iniciar o drift
+	if Input.is_key_pressed(KEY_SPACE):
+		grip_atual = drift_grip_drift
+
+	var target_vel = new_heading * _velocity.length()
+	var original_speed = _velocity.length()
+
 	if d > 0:
-		_velocity = new_heading * _velocity.length()
+		_velocity = _velocity.linear_interpolate(target_vel, grip_atual * delta)
 	if d < 0:
-		_velocity = -new_heading * min(_velocity.length(), max_speed_re)
+		_velocity = _velocity.linear_interpolate(-new_heading * min(_velocity.length(), max_speed_re), grip_atual * delta)
+
+	# Preserva a velocidade cinética durante o deslizamento lateral (drift)
+	if _velocity.length() > 0.1:
+		_velocity = _velocity.normalized() * original_speed
 
 	rotation = new_heading.angle() + PI / 2.0
 
@@ -216,19 +292,23 @@ func _physics_process(delta: float) -> void:
 					Input.vibrate_handheld(120)
 
 	# ── Marcas de pneu ────────────────────────────────────────────────────────
-	var pneu_esq = to_global(PNEU_ESQ_LOCAL)
-	var pneu_dir = to_global(PNEU_DIR_LOCAL)
+	var pneu_esq = transform.xform(PNEU_ESQ_LOCAL)
+	var pneu_dir = transform.xform(PNEU_DIR_LOCAL)
 	if _pneu_esq_ant != null and _lat_vel.length() > LIMIAR_DERRAPA and _velocity.length() > 100.0:
 		_adicionar_marca(_pneu_esq_ant, pneu_esq)
 		_adicionar_marca(_pneu_dir_ant, pneu_dir)
 	_pneu_esq_ant = pneu_esq
 	_pneu_dir_ant = pneu_dir
 
-	# ── Look-ahead ────────────────────────────────────────────────────────────
+	# ── Look-ahead + Efeito G (Força Centrífuga Visual) ───────────────────────
 	var spd_frac    = clamp(_velocity.length() / max_speed, 0.0, 1.0)
 	var look_target = Vector2(0.0, -LOOK_AHEAD * spd_frac) if _velocity.length() > 50.0 else Vector2.ZERO
 	_look_ahead_offset = lerp(_look_ahead_offset, look_target, LOOK_AHEAD_VEL * delta)
-	_camera.position   = BASE_CAM_LOCAL + _look_ahead_offset
+	
+	# Deslocamento lateral da câmera simulando a força centrífuga (força G lateral)
+	var lateral_g = _velocity.dot(transform.x)
+	var g_offset = Vector2(lateral_g * 0.88, 0.0)
+	_camera.position   = BASE_CAM_LOCAL + _look_ahead_offset + g_offset
 
 	# ── Camera shake ──────────────────────────────────────────────────────────
 	if _shake_ampl > 0.1:
@@ -246,7 +326,7 @@ func _physics_process(delta: float) -> void:
 		_visual.modulate = Color(1, 1, 1)
 
 	# ── Zoom dinâmico ─────────────────────────────────────────────────────────
-	var zoom_alvo = lerp(1.4, 2.2, clamp(_velocity.length() / max_speed, 0.0, 1.0))
+	var zoom_alvo = lerp(1.15, 1.85, clamp(_velocity.length() / max_speed, 0.0, 1.0))
 	_camera.zoom  = lerp(_camera.zoom, Vector2(zoom_alvo, zoom_alvo), 4.0 * delta)
 
 	emit_signal("velocidade_mudou", _velocity.length() * 0.131)
@@ -282,3 +362,17 @@ func _adicionar_marca(p1: Vector2, p2: Vector2) -> void:
 		var antiga = _marcas.pop_front()
 		if is_instance_valid(antiga):
 			antiga.queue_free()
+
+
+func aplicar_modelo(modelo_idx: int, cor: Color) -> void:
+	var modelo = MODELOS[modelo_idx]
+	engine_power = modelo["engine_power"]
+	braking = modelo["braking"]
+	max_speed = modelo["max_speed"]
+	drift_grip_normal = modelo["grip_normal"]
+	drift_grip_drift = modelo["grip_drift"]
+	
+	var visual = get_node_or_null("Visual")
+	if visual:
+		visual.texture = modelo["textura"]
+		visual.color = cor

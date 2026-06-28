@@ -2,6 +2,7 @@
 extends Node2D
 
 const URL_JSON = "https://hericmr.github.io/gta/maps/santos.json"
+const URL_LINHAS = "https://hericmr.github.io/gta/newdata/linhas_onibus.json"
 
 # preload garante inclusão no PCK ao exportar (load(variável) não é detectado)
 const NpcCarScript      = preload("res://scripts/npc_car.gd")
@@ -20,15 +21,15 @@ const VEL_PED_MIN  = 150.0
 const VEL_PED_MAX  = 210.0
 
 # Contagem: reduzida automaticamente no celular
-var N_CARROS    = 20
-var N_PEDESTRES = 120
+var N_CARROS    = 35
+var N_PEDESTRES = 200
 
 const RAIO_SPAWN   = 5000.0
 const RAIO_DESPAWN = 7500.0
 const MIN_PTS      = 4
 
 # Grafo de conectividade
-const RAIO_CONEXAO  = 150.0  # px — distância máxima entre endpoints para pré-conectar ruas
+const RAIO_CONEXAO  = 350.0  # px — distância máxima entre endpoints para pré-conectar ruas
 const GRADE_CONEXAO = 300.0  # px — célula da grade auxiliar usada na construção do grafo
 const SNAP_VIZIN    = 4      # células ±N toleradas na busca de saídas em tempo real
 
@@ -54,12 +55,29 @@ var _paradas_onibus: Array = []   # posições (px) das paradas de ônibus de Sa
 
 func _ready() -> void:
 	if OS.get_name() == "HTML5":
+		var req_paradas = HTTPRequest.new()
+		add_child(req_paradas)
+		req_paradas.connect("request_completed", self, "_on_paradas_json_carregado")
+		req_paradas.request(URL_LINHAS)
+
 		var req = HTTPRequest.new()
 		add_child(req)
 		req.connect("request_completed", self, "_on_json_carregado")
 		req.request(URL_JSON)
 	else:
 		_carregar_ruas()
+
+
+func _on_paradas_json_carregado(_result, code, _headers, body) -> void:
+	if code != 200:
+		push_warning("[Traffic] Falha HTTP ao carregar paradas (code=%d)" % code)
+		return
+	var dados = parse_json(body.get_string_from_utf8())
+	if dados:
+		for linha in dados.get("linhas", []):
+			for p in linha.get("paradas_px", []):
+				_paradas_onibus.append(Vector2(p["x"] * ESCALA, p["y"] * ESCALA))
+		print("[Traffic] %d paradas de ônibus carregadas via HTTP" % _paradas_onibus.size())
 
 
 func definir_ref(no) -> void:
@@ -145,9 +163,19 @@ func _processar_ruas(d: Dictionary) -> void:
 		var oneway  = rua.get("oneway", false)
 		var entrada = {"wps": arr, "oneway": oneway}
 		if largura >= LARGURA_MIN_CARRO:
-			_ruas_carro.append(entrada)
+			if largura >= 7:
+				var lane_offset = largura * 0.25 * ESCALA
+				var lane_esq = _offset_wps(arr, lane_offset)
+				var lane_dir = _offset_wps(arr, -lane_offset)
+				if lane_esq.size() >= MIN_PTS:
+					_ruas_carro.append({"wps": lane_esq, "oneway": oneway})
+				if lane_dir.size() >= MIN_PTS:
+					_ruas_carro.append({"wps": lane_dir, "oneway": oneway})
+			else:
+				_ruas_carro.append(entrada)
+
 			# Gera calçadas paralelas em ambos os lados da rua
-			var offset_extra = 5.5 if largura >= 7 else 3.5
+			var offset_extra = 8.0 if largura >= 7 else 6.0
 			var offset_px = (largura * 0.5 + offset_extra) * ESCALA
 			var cal_esq = _offset_wps(arr, offset_px)
 			var cal_dir = _offset_wps(arr, -offset_px)
@@ -204,6 +232,8 @@ func _verificar_pool(pool, ruas, wps_dict, ow_dict, script_path, v_min, v_max, c
 	for npc in pool:
 		if not is_instance_valid(npc):
 			continue
+		if npc.get("no_onibus"):
+			continue
 		var fora = not rect.has_point(npc.position)
 		var morto = npc.get("_morto")
 		if fora and (morto or npc.position.distance_to(_ref.position) > RAIO_DESPAWN):
@@ -224,7 +254,8 @@ func _criar_npc(ruas, wps_dict, ow_dict, script_res, v_min, v_max, cb):
 		var parada = _parada_proxima(wps[info.start], 6000.0)
 		if parada != Vector2.ZERO:
 			wps = PoolVector2Array(wps)
-			wps.append(parada)
+			var desvio = Vector2(rand_range(-55.0, 55.0), rand_range(-55.0, 55.0))
+			wps.append(parada + desvio)
 	c.inicializar(wps, vel, info.start)
 	wps_dict[c] = wps
 	ow_dict[c]  = info.oneway
@@ -255,8 +286,15 @@ func _resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect) -> void:
 	if info.empty():
 		return
 	var vel = lerp(v_min, v_max, randf())
-	npc.inicializar(info.wps, vel, info.start)
-	wps_dict[npc] = info.wps
+	var wps = info.wps
+	if npc.is_in_group("pedestres") and not _paradas_onibus.empty() and randf() < 0.25:
+		var parada = _parada_proxima(wps[info.start], 6000.0)
+		if parada != Vector2.ZERO:
+			wps = PoolVector2Array(wps)
+			var desvio = Vector2(rand_range(-55.0, 55.0), rand_range(-55.0, 55.0))
+			wps.append(parada + desvio)
+	npc.inicializar(wps, vel, info.start)
+	wps_dict[npc] = wps
 	ow_dict[npc]  = info.oneway
 
 
@@ -267,8 +305,11 @@ func _on_fim_ped(ped) -> void:
 	if not is_instance_valid(ped):
 		return
 	if not _paradas_onibus.empty() and _perto_de_parada(ped.position, 230.0):
-		ped._esperando_onibus = true
-		return
+		if ped.get("recem_desembarcado"):
+			ped.recem_desembarcado = false
+		else:
+			ped._esperando_onibus = true
+			return
 	_on_fim_npc(ped, _ruas_ped, _grafo_ped, _ped_wps, _ped_ow, VEL_PED_MIN, VEL_PED_MAX)
 
 func _on_fim_npc(npc, ruas, grafo, wps_dict, ow_dict, v_min, v_max) -> void:
@@ -304,9 +345,10 @@ func _on_fim_npc(npc, ruas, grafo, wps_dict, ow_dict, v_min, v_max) -> void:
 		npc.inicializar(inv, vel, 0)
 		wps_dict[npc] = inv
 		return
-	# Carro fora de câmera e sem rota: reposiciona fora da tela
-	if not rect.has_point(npc.position):
-		_resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect)
+	
+	# Fail-safe: se não pode inverter (rua de mão única ou fim de rota),
+	# reseta/teletransporta o NPC para manter o tráfego fluindo
+	_resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect)
 
 
 func _wps_fora_de_camera(ruas, rect: Rect2) -> Dictionary:
