@@ -48,12 +48,17 @@ var _ped_ow:    Dictionary = {}
 
 var _ref             = null
 var _process_timer:  float = 0.0
-const PROCESS_INTERVAL = 0.5
+var PROCESS_INTERVAL = 0.5
 
 var _paradas_onibus: Array = []   # posições (px) das paradas de ônibus de Santos
 
 
 func _ready() -> void:
+	if OS.has_touchscreen_ui_hint():
+		N_CARROS         = 10
+		N_PEDESTRES      = 40
+		PROCESS_INTERVAL = 1.0
+
 	if OS.get_name() == "HTML5":
 		var req_paradas = HTTPRequest.new()
 		add_child(req_paradas)

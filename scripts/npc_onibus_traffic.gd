@@ -16,6 +16,9 @@ var _ref           = null
 
 
 func _ready() -> void:
+	if OS.has_touchscreen_ui_hint():
+		N_ONIBUS = 20
+
 	if OS.get_name() == "HTML5":
 		var req = HTTPRequest.new()
 		add_child(req)

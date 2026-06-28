@@ -32,6 +32,7 @@ var _tex_pontilhado = null
 var _corpo_global = null   # StaticBody2D de fallback (não usada para prédios lazy)
 var _predios_dinamicos: Array = []  # [{pool, wall_px, centro, roof, quads}] carregados
 var _ruas_nomeadas:     Array = []  # [{nome, pts: PoolVector2Array}]
+var _ruas_nomeadas_chunk: Dictionary = {}  # "cx_cy" → Array de {nome, pts} para busca espacial
 
 # Chunk system
 var _predios_chunk:      Dictionary = {}  # "cx_cy" → Array de dados OSM
@@ -40,6 +41,11 @@ var _corpos_chunk:       Dictionary = {}  # "cx_cy" → StaticBody2D com colisõ
 var _visuais_chunk:      Dictionary = {}  # "cx_cy" → Array de nodes visuais 2.5D
 var _dinamicos_chunk:    Dictionary = {}  # "cx_cy" → Array de dicts parallax
 var _chunk_player:       Vector2    = Vector2(-999.0, -999.0)
+
+# Mobile: flags de performance
+var _is_mobile:      bool = false
+var _round_prec:     int  = 32
+var _parallax_frame: int  = 0
 
 const TEX_GRAMA_SRC = preload("res://assets/texturas/grass03.png")
 const TILE_GRAMA    = 35.0   # unidades pré-escala por repetição de tile (35 u = 525 px de jogo)
@@ -59,6 +65,8 @@ var _dados_features    = null
 
 
 func _ready():
+	_is_mobile = OS.has_touchscreen_ui_hint()
+	_round_prec = 8 if _is_mobile else 32
 	scale = Vector2(ESCALA, ESCALA)
 	if OS.get_name() == "HTML5":
 		_fetch_json()
@@ -445,7 +453,7 @@ func _criar_ruas_visual():
 		calcada.joint_mode = Line2D.LINE_JOINT_ROUND
 		calcada.begin_cap_mode = Line2D.LINE_CAP_ROUND
 		calcada.end_cap_mode = Line2D.LINE_CAP_ROUND
-		calcada.round_precision = 32
+		calcada.round_precision = _round_prec
 		calcada.z_index = _z_rua(largura) - 30
 		add_child(calcada)
 
@@ -472,7 +480,7 @@ func _criar_ruas_visual():
 		linha.joint_mode = Line2D.LINE_JOINT_ROUND
 		linha.begin_cap_mode = Line2D.LINE_CAP_ROUND
 		linha.end_cap_mode = Line2D.LINE_CAP_ROUND
-		linha.round_precision = 32
+		linha.round_precision = _round_prec
 		linha.z_index = _z_rua(largura) - 24
 		add_child(linha)
 
@@ -487,7 +495,7 @@ func _criar_ruas_visual():
 			faixa.joint_mode = Line2D.LINE_JOINT_ROUND
 			faixa.begin_cap_mode = Line2D.LINE_CAP_ROUND
 			faixa.end_cap_mode = Line2D.LINE_CAP_ROUND
-			faixa.round_precision = 32
+			faixa.round_precision = _round_prec
 			faixa.z_index = linha.z_index + 1
 			add_child(faixa)
 
@@ -712,23 +720,37 @@ func _indexar_ruas_nomeadas() -> void:
 		if nome == "":
 			continue
 		var pts = PoolVector2Array()
+		var cx_sum = 0.0
+		var cy_sum = 0.0
 		for p in rua["pontos"]:
 			pts.append(Vector2(p[0], p[1]))
-		_ruas_nomeadas.append({"nome": nome, "pts": pts})
+			cx_sum += p[0]
+			cy_sum += p[1]
+		var entry = {"nome": nome, "pts": pts}
+		_ruas_nomeadas.append(entry)
+		var ck = _chunk_key_pre(cx_sum / pts.size(), cy_sum / pts.size())
+		if not _ruas_nomeadas_chunk.has(ck):
+			_ruas_nomeadas_chunk[ck] = []
+		_ruas_nomeadas_chunk[ck].append(entry)
 
 
 func rua_proxima(pos_jogo: Vector2) -> String:
-	if _ruas_nomeadas.empty():
+	if _ruas_nomeadas_chunk.empty():
 		return ""
 	var pos_pre   = pos_jogo / ESCALA
 	var melhor    = ""
 	var melhor_d2 = 350.0 * 350.0
-	for r in _ruas_nomeadas:
-		for pt in r["pts"]:
-			var d2 = pt.distance_squared_to(pos_pre)
-			if d2 < melhor_d2:
-				melhor_d2 = d2
-				melhor    = r["nome"]
+	var cx = int(pos_pre.x / CHUNK_SIZE_PRE)
+	var cy = int(pos_pre.y / CHUNK_SIZE_PRE)
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			var k = str(cx + dx) + "_" + str(cy + dy)
+			for r in _ruas_nomeadas_chunk.get(k, []):
+				for pt in r["pts"]:
+					var d2 = pt.distance_squared_to(pos_pre)
+					if d2 < melhor_d2:
+						melhor_d2 = d2
+						melhor    = r["nome"]
 	return melhor
 
 
@@ -750,7 +772,13 @@ func atualizar_parallax(pos_jogo: Vector2) -> void:
 
 	if _predios_dinamicos.empty():
 		return
-	var raio2 = 250.0 * 250.0  # só atualiza prédios dentro de ~250 unidades pré-ESCALA
+
+	# Mobile: atualiza parallax a cada 2 frames para poupar CPU/GPU
+	_parallax_frame = (_parallax_frame + 1) % 2
+	if _is_mobile and _parallax_frame != 0:
+		return
+
+	var raio2 = (150.0 * 150.0) if _is_mobile else (250.0 * 250.0)
 
 	for dados in _predios_dinamicos:
 		var centro: Vector2 = dados.centro
