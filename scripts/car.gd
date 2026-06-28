@@ -326,7 +326,7 @@ func _physics_process(delta: float) -> void:
 		_visual.modulate = Color(1, 1, 1)
 
 	# ── Zoom dinâmico ─────────────────────────────────────────────────────────
-	var zoom_alvo = lerp(1.15, 1.85, clamp(_velocity.length() / max_speed, 0.0, 1.0))
+	var zoom_alvo = lerp(0.55, 1.35, clamp(_velocity.length() / max_speed, 0.0, 1.0))
 	_camera.zoom  = Vector2(zoom_alvo, zoom_alvo)
 
 	emit_signal("velocidade_mudou", _velocity.length() * 0.131)
