@@ -459,19 +459,21 @@ func _criar_ruas_visual():
 
 	# Ruas
 	for rua in ruas_ordenadas:
-		var largura = float(rua["largura"])
+		var largura    = float(rua["largura"])
+		var tipo_rua   = rua.get("tipo", "")
+		# Ciclovia: campo tipo == "cycleway", ou JSON antigo sem tipo onde largura == 3
+		var eh_ciclovia = (tipo_rua == "cycleway") or (tipo_rua == "" and largura == 3)
 		var linha = Line2D.new()
 		var pts = PoolVector2Array()
 		for p in rua["pontos"]: pts.append(Vector2(p[0], p[1]))
 		linha.points = pts
-		# Se for viela ou ciclovia (largura <= 3), aplica textura pixelada lisa
 		if largura <= 3:
 			linha.texture = _obter_textura_viela_procedural()
 			linha.texture_mode = Line2D.LINE_TEXTURE_TILE
-			if largura == 3:
-				linha.default_color = Color(0.68, 0.26, 0.18, 1.00) # vermelho terracota/terroso para ciclovia (largura 3)
+			if eh_ciclovia:
+				linha.default_color = Color(0.68, 0.26, 0.18, 1.00) # vermelho terracota para ciclovia
 			else:
-				linha.default_color = Color(1.00, 1.00, 1.00, 1.00) # branco/cinza claro para vielas (largura <= 2)
+				linha.default_color = Color(1.00, 1.00, 1.00, 1.00) # branco para vielas/footways/paths
 		else:
 			linha.texture = _obter_textura_asfalto_procedural()
 			linha.texture_mode = Line2D.LINE_TEXTURE_TILE
@@ -484,12 +486,12 @@ func _criar_ruas_visual():
 		linha.z_index = _z_rua(largura) - 24
 		add_child(linha)
 
-		# Se for uma avenida (largura >= 7) ou ciclovia (largura == 3), adiciona faixa central pontilhada branca
-		if largura >= 7 or largura == 3:
+		# Faixa central pontilhada: avenidas e ciclovias
+		if largura >= 7 or eh_ciclovia:
 			var faixa = Line2D.new()
 			faixa.points = pts
 			faixa.default_color = Color(1.0, 1.0, 1.0, 0.85)
-			faixa.width = 0.10 if largura == 3 else 0.15
+			faixa.width = 0.10 if eh_ciclovia else 0.15
 			faixa.texture = _obter_textura_pontilhada()
 			faixa.texture_mode = Line2D.LINE_TEXTURE_TILE
 			faixa.joint_mode = Line2D.LINE_JOINT_ROUND

@@ -108,7 +108,7 @@ def converter(raw, m):
             else:
                 oneway = ow_tag in ("yes", "1", "true")
             nome   = tags.get("name", "")
-            ruas.append({"pontos": pontos, "largura": larg, "oneway": oneway, "nome": nome})
+            ruas.append({"pontos": pontos, "largura": larg, "oneway": oneway, "nome": nome, "tipo": hw})
 
         elif "building" in tags:
             coords = [[p["lon"], p["lat"]] for p in geom]
