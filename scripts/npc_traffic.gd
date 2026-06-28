@@ -24,9 +24,12 @@ const VEL_PED_MAX  = 210.0
 var N_CARROS    = 35
 var N_PEDESTRES = 200
 
-const RAIO_SPAWN   = 5000.0
-const RAIO_DESPAWN = 7500.0
-const MIN_PTS      = 4
+const RAIO_SPAWN    = 5000.0
+const RAIO_DESPAWN  = 7500.0
+const RAIO_ATIVO    = 2000.0   # px — dentro desse raio: física + IA ligadas
+const RAIO_ATIVO_2  = RAIO_ATIVO  * RAIO_ATIVO
+const RAIO_DESPAWN_2 = RAIO_DESPAWN * RAIO_DESPAWN
+const MIN_PTS       = 4
 
 # Grafo de conectividade
 const RAIO_CONEXAO  = 350.0  # px — distância máxima entre endpoints para pré-conectar ruas
@@ -234,15 +237,31 @@ func _spawnar_pool(pool, ruas, n, wps_dict, ow_dict, script_path, v_min, v_max, 
 
 
 func _verificar_pool(pool, ruas, wps_dict, ow_dict, script_path, v_min, v_max, cb, rect) -> void:
+	var pos_ref = _ref.position
 	for npc in pool:
 		if not is_instance_valid(npc):
 			continue
 		if npc.get("no_onibus"):
 			continue
-		var fora = not rect.has_point(npc.position)
+
+		var dist2 = pos_ref.distance_squared_to(npc.position)
 		var morto = npc.get("_morto")
-		if fora and (morto or npc.position.distance_to(_ref.position) > RAIO_DESPAWN):
+
+		# Despawn: fora de tela e além do raio máximo, ou morto longe do jogador
+		if not rect.has_point(npc.position) and (morto or dist2 > RAIO_DESPAWN_2):
+			if npc.get("_congelado"):
+				npc.descongelar()
 			_resetar_npc(npc, ruas, wps_dict, ow_dict, v_min, v_max, rect)
+			continue
+
+		# Culling por distância: pausa física de NPCs além do raio ativo
+		if dist2 > RAIO_ATIVO_2:
+			# Pedestres esperando ônibus não congelam — o ônibus pode estar longe do jogador
+			if not npc.get("_esperando_onibus") and not npc.get("_congelado"):
+				npc.congelar()
+		else:
+			if npc.get("_congelado"):
+				npc.descongelar()
 
 
 func _criar_npc(ruas, wps_dict, ow_dict, script_res, v_min, v_max, cb):

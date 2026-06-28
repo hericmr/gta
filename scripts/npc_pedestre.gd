@@ -49,8 +49,29 @@ var no_onibus:         bool   = false
 var recem_desembarcado: bool  = false
 var _tempo_idle:       float  = 0.0
 var _desvio_idle:      Vector2 = Vector2.ZERO
+var _congelado:        bool   = false
 
 signal chegou_ao_fim
+
+
+func congelar() -> void:
+	if _congelado or no_onibus:
+		return
+	_congelado      = true
+	set_physics_process(false)
+	set_process(false)
+	collision_layer = 0
+	collision_mask  = 0
+
+
+func descongelar() -> void:
+	if not _congelado:
+		return
+	_congelado      = false
+	set_physics_process(true)
+	set_process(true)
+	collision_layer = 8
+	collision_mask  = 1
 
 
 func _ready() -> void:

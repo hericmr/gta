@@ -90,6 +90,26 @@ var _sensor_peds: Area2D  = null
 
 signal chegou_ao_fim
 
+var _congelado: bool = false
+
+
+func congelar() -> void:
+	if _congelado:
+		return
+	_congelado      = true
+	set_physics_process(false)
+	collision_layer = 0
+	collision_mask  = 0
+
+
+func descongelar() -> void:
+	if not _congelado:
+		return
+	_congelado      = false
+	set_physics_process(true)
+	collision_layer = 2
+	collision_mask  = 3
+
 
 func _ready() -> void:
 	add_to_group("npc_carros")
