@@ -86,6 +86,8 @@ func _finalizar():
 	_indexar_ruas_nomeadas()
 	print("[WorldOSM] %d prédios OSM e %d 2.5D indexados em chunks." % [
 		_dados["predios"].size(), (_dados_2p5d["predios"].size() if _dados_2p5d else 0)])
+	# Garante que o próximo atualizar_parallax recarregue os chunks com os dados já indexados
+	_chunk_player = Vector2(-999.0, -999.0)
 
 
 # ── Chunk system ──────────────────────────────────────────────────────────────

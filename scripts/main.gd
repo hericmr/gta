@@ -31,21 +31,18 @@ func _ready() -> void:
 	if _world.has_meta("satelite_stream"):
 		_stream = _world.get_meta("satelite_stream")
 
-	# Habilita controles a pé por padrão e vincula referências
+	# Posiciona player e carro na Trabulsi e inicia o jogo diretamente
+	_player.position = SPAWN
+	_car.position = SPAWN + Vector2(80, 0)
 	_modo_a_pe()
 	_hud.definir_ref(_player)
 	_traffic.definir_ref(_player)
 	_onibus.definir_ref(_player)
-	_world.atualizar_parallax(_player.position)
-
-	# Inicia o jogo desativado na tela de seleção de spawn por clique
-	_player.ativo = false
-	_player.visible = false
-	yield(get_tree().create_timer(0.3), "timeout")
-	_abrir_mapa_inicial()
-
-func _abrir_mapa_inicial() -> void:
-	_mapa.abrir_para_spawn()
+	_world.atualizar_parallax(SPAWN)
+	_player.get_node("Camera2D").reset_smoothing()
+	if _stream:
+		_stream._carro = _player
+	_hud.atualizar_rua("BEM-VINDO A SANTOS")
 
 func _process(delta: float) -> void:
 	if _no_onibus:
