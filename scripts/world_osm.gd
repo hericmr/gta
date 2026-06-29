@@ -571,6 +571,10 @@ func _criar_ruas_visual():
 		var pts = PoolVector2Array()
 		for p in rua["pontos"]: pts.append(Vector2(p[0], p[1]))
 		linha.points = pts
+		
+		# Determina a largura real da rua (asfalto)
+		var largura_asfalto = _mult_rua(largura) * largura
+		
 		if largura <= 3:
 			linha.texture = _obter_textura_viela_procedural()
 			linha.texture_mode = Line2D.LINE_TEXTURE_TILE
@@ -582,12 +586,44 @@ func _criar_ruas_visual():
 			linha.texture = _obter_textura_asfalto_procedural()
 			linha.texture_mode = Line2D.LINE_TEXTURE_TILE
 			linha.default_color = _cor_rua(largura)
-		linha.width = _mult_rua(largura) * largura
+			
+		linha.width = largura_asfalto
 		linha.joint_mode = Line2D.LINE_JOINT_ROUND
 		linha.begin_cap_mode = Line2D.LINE_CAP_ROUND
 		linha.end_cap_mode = Line2D.LINE_CAP_ROUND
 		linha.round_precision = _round_prec
 		linha.z_index = _z_rua(largura) - 24
+		
+		# Só adiciona meio-fio (curb) e sombra 2.5D para ruas com asfalto (largura > 3)
+		if largura > 3:
+			# 1. Sombra projetada do meio-fio na calçada (Efeito de elevação 2.5D)
+			var sombra_meio_fio = Line2D.new()
+			var pts_sombra = PoolVector2Array()
+			# Desloca a sombra ligeiramente para o sudeste (simula luz solar vindo do noroeste)
+			for pt in pts:
+				pts_sombra.append(pt + Vector2(1.8, 2.8))
+			sombra_meio_fio.points = pts_sombra
+			sombra_meio_fio.default_color = Color(0.0, 0.0, 0.0, 0.35) # sombra suave
+			sombra_meio_fio.width = largura_asfalto + 5.0
+			sombra_meio_fio.joint_mode = Line2D.LINE_JOINT_ROUND
+			sombra_meio_fio.begin_cap_mode = Line2D.LINE_CAP_ROUND
+			sombra_meio_fio.end_cap_mode = Line2D.LINE_CAP_ROUND
+			sombra_meio_fio.round_precision = _round_prec
+			sombra_meio_fio.z_index = linha.z_index - 2
+			add_child(sombra_meio_fio)
+
+			# 2. Borda física do meio-fio (concreto cinza escuro elevado)
+			var borda_meio_fio = Line2D.new()
+			borda_meio_fio.points = pts
+			borda_meio_fio.default_color = Color(0.24, 0.24, 0.24, 1.00) # concreto cinza do meio-fio
+			borda_meio_fio.width = largura_asfalto + 2.5
+			borda_meio_fio.joint_mode = Line2D.LINE_JOINT_ROUND
+			borda_meio_fio.begin_cap_mode = Line2D.LINE_CAP_ROUND
+			borda_meio_fio.end_cap_mode = Line2D.LINE_CAP_ROUND
+			borda_meio_fio.round_precision = _round_prec
+			borda_meio_fio.z_index = linha.z_index - 1
+			add_child(borda_meio_fio)
+
 		add_child(linha)
 
 		# Faixa central pontilhada: avenidas e ciclovias

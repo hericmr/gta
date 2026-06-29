@@ -63,10 +63,12 @@ const SHAKE_DECAY      = 80.0
 const LOOK_AHEAD       = 350.0
 const LOOK_AHEAD_VEL   = 1.5
 const BASE_CAM_LOCAL   = Vector2(37.5, -120.0)
-const MAX_MARCAS       = 40
+const MAX_MARCAS       = 160
 const LIMIAR_DERRAPA   = 80.0
-const PNEU_ESQ_LOCAL   = Vector2(10, 150)
-const PNEU_DIR_LOCAL   = Vector2(62, 150)
+const PNEU_TR_ESQ_LOCAL = Vector2(10, 150) # Traseiro Esquerdo
+const PNEU_TR_DIR_LOCAL = Vector2(62, 150) # Traseiro Direito
+const PNEU_DI_ESQ_LOCAL = Vector2(10, 55)  # Dianteiro Esquerdo
+const PNEU_DI_DIR_LOCAL = Vector2(62, 55)  # Dianteiro Direito
 
 var em_uso: bool = false setget _set_em_uso
 
@@ -78,13 +80,18 @@ var _lat_vel:      Vector2 = Vector2.ZERO
 
 var _loader             = null
 var _marcas:        Array = []
-var _pneu_esq_ant         = null
-var _pneu_dir_ant         = null
+var _pneu_tr_esq_ant      = null
+var _pneu_tr_dir_ant      = null
+var _pneu_di_esq_ant      = null
+var _pneu_di_dir_ant      = null
 var _shake_ampl:        float   = 0.0
 var _flash_timer:       float   = 0.0
 var _look_ahead_offset: Vector2 = Vector2.ZERO
 var _prev_position:     Vector2 = Vector2.ZERO
 var _col_cooldown:      Dictionary = {}
+var _joy                           = null
+var _gear_atual:        int     = 1
+var _shift_timer:       float   = 0.0
 
 onready var _camera: Camera2D          = $Camera2D
 onready var _radio:  AudioStreamPlayer = $Radio
@@ -98,7 +105,7 @@ const FAIXAS = [
 ]
 var _faixa_atual: int = 0
 
-signal velocidade_mudou(kmh)
+signal velocidade_mudou(kmh, marcha)
 
 
 func parar() -> void:
@@ -106,6 +113,7 @@ func parar() -> void:
 	_speed    = 0.0
 
 func _ready() -> void:
+	scale = Vector2(0.97, 0.97)
 	_radio.connect("finished", self, "_on_radio_finished")
 	aplicar_modelo(0, Color(0.99, 1.0, 0.0))
 	collision_layer = 2
@@ -156,10 +164,43 @@ func _process(_delta: float) -> void:
 		_loader = null
 
 
+func _get_joystick():
+	if _joy == null or not is_instance_valid(_joy):
+		var nos = get_tree().get_nodes_in_group("virtual_joystick")
+		_joy = nos[0] if not nos.empty() else null
+	return _joy
+
+
+func _get_current_engine_power() -> float:
+	if _shift_timer > 0.0:
+		return engine_power * 0.05  # Corte de embreagem durante a troca de marcha
+
+	var speed = _velocity.length()
+	var speed_ratio = clamp(speed / max_speed, 0.0, 1.0)
+	var gear_mult = 1.0
+	
+	if speed_ratio < 0.35:
+		gear_mult = 1.25  # 1ª Marcha: Arrancada forte
+	elif speed_ratio < 0.70:
+		gear_mult = 0.85  # 2ª Marcha: Média
+	else:
+		gear_mult = 0.55  # 3ª Marcha: Aceleração final progressiva
+		
+	return engine_power * gear_mult
+
+
 func _get_input() -> void:
 	var steer_dir: float = 0.0
-	if   Input.is_action_pressed("virar_direita")  or Input.is_action_pressed("ui_right") or Input.is_key_pressed(KEY_D): steer_dir =  1.0
-	elif Input.is_action_pressed("virar_esquerda") or Input.is_action_pressed("ui_left")  or Input.is_key_pressed(KEY_A): steer_dir = -1.0
+	
+	# Lê joystick analógico se estiver ativo (Mobile)
+	var joy = _get_joystick()
+	if joy != null and joy.visible and joy.output.length() > joy.dead_zone:
+		steer_dir = joy.output.x
+	else:
+		# Teclado / Ações digitais
+		if   Input.is_action_pressed("virar_direita")  or Input.is_action_pressed("ui_right") or Input.is_key_pressed(KEY_D): steer_dir =  1.0
+		elif Input.is_action_pressed("virar_esquerda") or Input.is_action_pressed("ui_left")  or Input.is_key_pressed(KEY_A): steer_dir = -1.0
+		
 	_steer_dir = steer_dir * deg2rad(steering_angle)
 
 	_acceleration = Vector2.ZERO
@@ -177,10 +218,10 @@ func _get_input() -> void:
 		
 		# Se acelerar enquanto puxa o freio de mão, aplica torque do motor para girar e dar cavalo de pau!
 		if acelerando:
-			_acceleration += -transform.y * engine_power * 1.1
+			_acceleration += -transform.y * _get_current_engine_power() * 1.1
 	else:
 		if acelerando:
-			_acceleration = -transform.y * engine_power
+			_acceleration = -transform.y * _get_current_engine_power()
 		elif freando:
 			_acceleration = -transform.y * (-braking)
 
@@ -197,41 +238,81 @@ func _calculate_steering(delta: float) -> void:
 	if _velocity.length() < 1.0:
 		return
 
-	var rear_wheel  = position + transform.y * (wheel_base / 2.0)
-	var front_wheel = position - transform.y * (wheel_base / 2.0)
-	rear_wheel  += _velocity * delta
-	front_wheel += _velocity.rotated(_steer_dir) * delta
-
-	var new_heading = rear_wheel.direction_to(front_wheel)
-	var d           = new_heading.dot(_velocity.normalized())
-
-	# O grip físico diminui conforme a velocidade aumenta, gerando inércia lateral
+	# O grip físico em condução normal é extremamente alto (estilo trilho de trem) para garantir curvas estáveis de raio constante
 	var vel_rel = clamp(_velocity.length() / max_speed, 0.0, 1.0)
-	var grip_atual = lerp(drift_grip_normal * 2.5, drift_grip_normal, vel_rel)
+	var base_grip = drift_grip_normal * 6.0  # Multiplica o grip base para travar a trajetória cinemática
+	var grip_atual = lerp(base_grip * 1.5, base_grip, vel_rel)
 
-	# Se pressionar ESPAÇO (freio de mão), o grip cai drasticamente para iniciar o drift
+	# Se pressionar ESPAÇO (freio de mão), o grip cai drasticamente para iniciar o drift/derrapagem
 	if Input.is_key_pressed(KEY_SPACE):
 		grip_atual = drift_grip_drift
 
-	var target_vel = new_heading * _velocity.length()
+	# Rotação física baseada na velocidade do carro e ângulo de esterço (geometria real)
+	var forward_dir = -transform.y
+	var speed = _velocity.length()
+	
+	# Taxa de rotação cinemática padrão: w = v * steer / L (evita o efeito ponteiro de relógio em baixa velocidade)
+	var turn_speed = speed * _steer_dir / wheel_base
+
+	var acelerando = Input.is_action_pressed("acelerar") or Input.is_key_pressed(KEY_W) or Input.is_action_pressed("ui_up")
+
+	# Sobrescrita para freio de mão e derrapagens (sobre-esterço arcade)
+	if Input.is_key_pressed(KEY_SPACE):
+		if acelerando:
+			# Cavalo de pau / Donut: rotação rápida que escala com a velocidade para não girar parado
+			var pivot_scale = clamp(speed / 90.0, 0.0, 1.0)
+			turn_speed = _steer_dir * 8.0 * pivot_scale
+		else:
+			# Deslizamento lateral com freio de mão (traseira escorregando rápido)
+			turn_speed *= 2.8
+	else:
+		# Derrapagem natural em alta velocidade: aumenta a rotação à medida que o carro desliza lateralmente
+		var lateral_speed = (_velocity - forward_dir * _velocity.dot(forward_dir)).length()
+		var slip_factor = clamp(lateral_speed / 120.0, 0.0, 1.0)
+		turn_speed *= lerp(1.0, 2.4, slip_factor)
+
+	# Inverte a rotação se o carro estiver andando de ré
+	if _velocity.dot(forward_dir) < 0.0:
+		turn_speed = -turn_speed
+
+	# Aplica a rotação diretamente no próprio centro (eixo) do carro
+	rotation += turn_speed * delta
+	var target_vel = forward_dir * _velocity.length()
 	var original_speed = _velocity.length()
 
-	if d > 0:
+	# Determina se está indo para frente ou de ré
+	var d = forward_dir.dot(_velocity.normalized())
+
+	if d >= 0:
 		_velocity = _velocity.linear_interpolate(target_vel, grip_atual * delta)
-	if d < 0:
-		_velocity = _velocity.linear_interpolate(-new_heading * min(_velocity.length(), max_speed_re), grip_atual * delta)
+	else:
+		_velocity = _velocity.linear_interpolate(-forward_dir * min(_velocity.length(), max_speed_re), grip_atual * delta)
 
-	# Preserva a velocidade cinética durante o deslizamento lateral (drift)
+	# Atrito de derrapagem (perda de velocidade por arrasto lateral)
 	if _velocity.length() > 0.1:
-		_velocity = _velocity.normalized() * original_speed
-
-	rotation = new_heading.angle() + PI / 2.0
+		var lateral_speed = (_velocity - forward_dir * _velocity.dot(forward_dir)).length()
+		
+		# A perda de velocidade aumenta com a intensidade da derrapagem (velocidade lateral)
+		# Se usar freio de mão (SPACE), simula o travamento das rodas com atrito ainda maior
+		var drift_friction_coeff = 0.65  # Coeficiente de arrasto de derrapagem base
+		if Input.is_key_pressed(KEY_SPACE):
+			drift_friction_coeff = 1.05  # Arrasto intenso ao travar as rodas com freio de mão
+			
+		var speed_loss = lateral_speed * drift_friction_coeff * delta
+		var final_speed = max(0.0, original_speed - speed_loss)
+		
+		_velocity = _velocity.normalized() * final_speed
 
 
 func _physics_process(delta: float) -> void:
+	if _shift_timer > 0.0:
+		_shift_timer = max(0.0, _shift_timer - delta)
+
 	if not em_uso:
-		_pneu_esq_ant = null
-		_pneu_dir_ant = null
+		_pneu_tr_esq_ant = null
+		_pneu_tr_dir_ant = null
+		_pneu_di_esq_ant = null
+		_pneu_di_dir_ant = null
 		_velocity    *= pow(0.3, delta)
 		if _velocity.length() < 10.0:
 			_velocity = Vector2.ZERO
@@ -293,30 +374,26 @@ func _physics_process(delta: float) -> void:
 					Input.vibrate_handheld(120)
 
 	# ── Marcas de pneu ────────────────────────────────────────────────────────
-	var pneu_esq = transform.xform(PNEU_ESQ_LOCAL)
-	var pneu_dir = transform.xform(PNEU_DIR_LOCAL)
-	if _pneu_esq_ant != null and _lat_vel.length() > LIMIAR_DERRAPA and _velocity.length() > 100.0:
-		_adicionar_marca(_pneu_esq_ant, pneu_esq)
-		_adicionar_marca(_pneu_dir_ant, pneu_dir)
-	_pneu_esq_ant = pneu_esq
-	_pneu_dir_ant = pneu_dir
-
-	# ── Look-ahead + Efeito G (Força Centrífuga Visual) ───────────────────────
-	var spd_frac    = clamp(_velocity.length() / max_speed, 0.0, 1.0)
-	var look_target = Vector2(0.0, -LOOK_AHEAD * spd_frac) if _velocity.length() > 50.0 else Vector2.ZERO
-	_look_ahead_offset = look_target
+	var pneu_tr_esq = transform.xform(PNEU_TR_ESQ_LOCAL)
+	var pneu_tr_dir = transform.xform(PNEU_TR_DIR_LOCAL)
+	var pneu_di_esq = transform.xform(PNEU_DI_ESQ_LOCAL)
+	var pneu_di_dir = transform.xform(PNEU_DI_DIR_LOCAL)
 	
-	# Deslocamento lateral da câmera simulando a força centrífuga (força G lateral)
-	var lateral_g = _velocity.dot(transform.x)
-	var g_offset = Vector2(lateral_g * 0.88, 0.0)
-	_camera.position   = BASE_CAM_LOCAL + _look_ahead_offset + g_offset
+	if _pneu_tr_esq_ant != null and _lat_vel.length() > LIMIAR_DERRAPA and _velocity.length() > 100.0:
+		_adicionar_marca(_pneu_tr_esq_ant, pneu_tr_esq)
+		_adicionar_marca(_pneu_tr_dir_ant, pneu_tr_dir)
+		_adicionar_marca(_pneu_di_esq_ant, pneu_di_esq)
+		_adicionar_marca(_pneu_di_dir_ant, pneu_di_dir)
+		
+	_pneu_tr_esq_ant = pneu_tr_esq
+	_pneu_tr_dir_ant = pneu_tr_dir
+	_pneu_di_esq_ant = pneu_di_esq
+	_pneu_di_dir_ant = pneu_di_dir
 
-	# ── Camera shake ──────────────────────────────────────────────────────────
-	if _shake_ampl > 0.1:
-		_camera.offset = Vector2((randf()*2.0-1.0)*_shake_ampl, (randf()*2.0-1.0)*_shake_ampl)
-		_shake_ampl    = move_toward(_shake_ampl, 0.0, SHAKE_DECAY * delta)
-	else:
-		_camera.offset = Vector2.ZERO
+	# ── Câmera Ancorada (para análise precisa da curva) ──────────────────────
+	_camera.position = Vector2.ZERO
+	_camera.offset   = Vector2.ZERO
+	_camera.zoom     = Vector2(1.5, 1.5)
 
 	# ── Flash de impacto ──────────────────────────────────────────────────────
 	if _flash_timer > 0.0:
@@ -326,15 +403,39 @@ func _physics_process(delta: float) -> void:
 	else:
 		_visual.modulate = Color(1, 1, 1)
 
-	# ── Zoom dinâmico ─────────────────────────────────────────────────────────
-	var zoom_alvo = lerp(1.2, 2.2, clamp(_velocity.length() / max_speed, 0.0, 1.0))
-	_camera.zoom  = Vector2(zoom_alvo, zoom_alvo)
-
 	# ── Atualiza a Sombra para manter o ângulo fixo global ───────────────────
 	if _sombra:
 		_sombra.position = _visual.position + Vector2(5.0, 5.0).rotated(-rotation)
 
-	emit_signal("velocidade_mudou", _velocity.length() * 0.131)
+	# Atualização de marchas e embreagem (shift) com Histerese (evita oscilação)
+	var nova_marcha = _gear_atual
+	if _velocity.length() < 15.0:
+		nova_marcha = 0 # N
+	elif _velocity.dot(heading) < -15.0:
+		nova_marcha = -1 # R
+	else:
+		var speed_ratio = clamp(_velocity.length() / max_speed, 0.0, 1.0)
+		if _gear_atual <= 0:
+			nova_marcha = 1
+		elif _gear_atual == 1:
+			if speed_ratio >= 0.35:
+				nova_marcha = 2
+		elif _gear_atual == 2:
+			if speed_ratio >= 0.70:
+				nova_marcha = 3
+			elif speed_ratio < 0.28:
+				nova_marcha = 1
+		elif _gear_atual == 3:
+			if speed_ratio < 0.62:
+				nova_marcha = 2
+
+	# Só activa o shift timer se mudar de marcha em movimento para frente
+	if nova_marcha != _gear_atual:
+		if _gear_atual > 0 and nova_marcha > 0:
+			_shift_timer = 0.16 # 160ms de corte de torque
+		_gear_atual = nova_marcha
+
+	emit_signal("velocidade_mudou", _velocity.length() * 0.131, _gear_atual)
 
 
 func receber_impacto_externo(impulso: Vector2) -> void:

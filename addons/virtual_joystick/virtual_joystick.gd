@@ -12,6 +12,7 @@ export(int, "Always", "Touchscreen Only") var visibility_mode: int = VisibilityM
 export(int, "Fixed", "Dynamic")           var joystick_mode:   int = JoystickMode.DYNAMIC
 export(Color) var color_base: Color = Color(1.0, 1.0, 1.0, 0.22)
 export(Color) var color_knob: Color = Color(1.0, 1.0, 1.0, 0.42)
+export(bool)  var horizontal_only: bool = false
 
 # Saída pública: vetor 2D normalizado [-1,1] em cada eixo
 var output: Vector2 = Vector2.ZERO
@@ -67,6 +68,8 @@ func _input(event: InputEvent) -> void:
 
 func _update() -> void:
 	var offset: Vector2 = _knob_pos - _base_center
+	if horizontal_only:
+		offset.y = 0.0
 	if offset.length() > joystick_radius:
 		offset = offset.normalized() * joystick_radius
 	_knob_pos = _base_center + offset
@@ -127,9 +130,15 @@ func _draw() -> void:
 	var center: Vector2 = _base_center if _active else rect_size / 2.0
 	var kr: float       = joystick_radius * 0.40
 
-	# Anel externo (base)
-	draw_arc(center, joystick_radius, 0.0, TAU, 64, Color(1.0, 1.0, 1.0, 0.30), 3.0)
-	draw_circle(center, joystick_radius, Color(color_base.r, color_base.g, color_base.b, color_base.a * (0.6 if _active else 1.0)))
+	if horizontal_only:
+		# Slot horizontal para indicar direção linear (Premium UI)
+		draw_line(center - Vector2(joystick_radius, 0), center + Vector2(joystick_radius, 0), Color(1.0, 1.0, 1.0, 0.25), 6.0)
+		draw_circle(center - Vector2(joystick_radius, 0), 4.0, Color(1.0, 1.0, 1.0, 0.40))
+		draw_circle(center + Vector2(joystick_radius, 0), 4.0, Color(1.0, 1.0, 1.0, 0.40))
+	else:
+		# Anel externo (base radial)
+		draw_arc(center, joystick_radius, 0.0, TAU, 64, Color(1.0, 1.0, 1.0, 0.30), 3.0)
+		draw_circle(center, joystick_radius, Color(color_base.r, color_base.g, color_base.b, color_base.a * (0.6 if _active else 1.0)))
 
 	# Knob central
 	draw_circle(_knob_pos, kr, color_knob)

@@ -115,6 +115,7 @@ func descongelar() -> void:
 
 
 func _ready() -> void:
+	scale = Vector2(0.97, 0.97)
 	add_to_group("npc_carros")
 
 	modelo_idx = randi() % MODELOS.size()

@@ -76,6 +76,7 @@ func descongelar() -> void:
 
 
 func _ready() -> void:
+	scale = Vector2(0.97, 0.97)
 	add_to_group("pedestres")
 	_half_h = TEX_WALK.get_size().y / 2.0
 	_criar_sprites()

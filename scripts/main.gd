@@ -112,9 +112,12 @@ func _atualizar_touch_ui(no_carro: bool) -> void:
 	_touch_ui.get_node("BtnAcelerar").visible     = no_carro
 	_touch_ui.get_node("BtnFrear").visible        = no_carro
 	_touch_ui.get_node("BtnSair").visible         = no_carro
-	_touch_ui.get_node("BtnVirarEsq").visible     = no_carro
-	_touch_ui.get_node("BtnVirarDir").visible     = no_carro
-	_touch_ui.get_node("VirtualJoystick").visible = not no_carro
+	_touch_ui.get_node("BtnVirarEsq").visible     = false
+	_touch_ui.get_node("BtnVirarDir").visible     = false
+	
+	var joystick = _touch_ui.get_node("VirtualJoystick")
+	joystick.visible = true
+	joystick.horizontal_only = no_carro
 
 func _modo_a_pe() -> void:
 	_no_carro          = false

@@ -40,8 +40,15 @@ func _ready() -> void:
 	_criar_minimapa()
 
 
-func atualizar_velocidade(kmh: float) -> void:
-	_label.text = "%d km/h" % int(kmh)
+func atualizar_velocidade(kmh: float, marcha: int = 1) -> void:
+	var marcha_str = ""
+	if marcha == 0:
+		marcha_str = "N"
+	elif marcha == -1:
+		marcha_str = "R"
+	else:
+		marcha_str = "%d" % marcha
+	_label.text = "%d km/h [%s]" % [int(kmh), marcha_str]
 
 
 func atualizar_rua(nome: String) -> void:

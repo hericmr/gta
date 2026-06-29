@@ -49,6 +49,7 @@ signal chegou_ao_fim
 
 
 func _ready() -> void:
+	scale = Vector2(0.97, 0.97)
 	add_to_group("npc_onibus")
 	collision_layer = 2
 	collision_mask  = 1   # só colide com prédios; carros/ônibus não desviam a rota
