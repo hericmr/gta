@@ -5,6 +5,7 @@ class_name MapFeatures
 
 const SHADER_MAR    = preload("res://scripts/water_sea.shader")
 const SHADER_CANAL  = preload("res://scripts/water_canal.shader")
+const TEX_NOISE     = preload("res://Textures/water_noise.png")
 const TILE_GRAMA    = 35.0
 
 # Cria todos os nós visuais das feições geográficas no nó pai especificado
@@ -27,6 +28,7 @@ static func criar_features(parent: Node2D, dados: Dictionary) -> void:
 		
 		var mat = ShaderMaterial.new()
 		mat.shader = SHADER_MAR
+		mat.set_shader_param("noise_texture", TEX_NOISE)
 		poly.material = mat
 		
 		poly.color   = Color(1.0, 1.0, 1.0, 1.0)
@@ -93,6 +95,7 @@ static func criar_features(parent: Node2D, dados: Dictionary) -> void:
 		
 		var mat = ShaderMaterial.new()
 		mat.shader = SHADER_MAR
+		mat.set_shader_param("noise_texture", TEX_NOISE)
 		poly.material = mat
 		
 		poly.color   = Color(1.0, 1.0, 1.0, 1.0)
@@ -119,6 +122,7 @@ static func criar_features(parent: Node2D, dados: Dictionary) -> void:
 		mat.shader = SHADER_CANAL
 		mat.set_shader_param("canal_length", comprimento)
 		mat.set_shader_param("canal_width", largura)
+		mat.set_shader_param("noise_texture", TEX_NOISE)
 		
 		linha.material       = mat
 		linha.texture        = tex_agua
