@@ -8,6 +8,16 @@
 
 config_version=4
 
+_global_script_classes=[ {
+"base": "Reference",
+"class": "MapFeatures",
+"language": "GDScript",
+"path": "res://scripts/map_features.gd"
+} ]
+_global_script_class_icons={
+"MapFeatures": ""
+}
+
 [application]
 
 config/name="santos-driver"
@@ -19,7 +29,6 @@ config/version="0.1.0"
 
 window/size/width=640
 window/size/height=360
-window/size/fullscreen=true
 window/stretch/mode="viewport"
 window/stretch/aspect="expand"
 window/fullscreen=false

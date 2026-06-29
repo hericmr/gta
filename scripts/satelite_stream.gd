@@ -101,10 +101,13 @@ func _carregar_tile(tx: int, ty: int) -> void:
 		_fila_http.append({"tx": tx, "ty": ty})
 		return
 
-	# Desktop: lê direto do disco
-	var arquivo = _base + ("z%d_%d_%d.png" % [ZOOM, tx, ty])
+	# Desktop: lê direto do disco (res://)
+	var arquivo = _base + ("z%d_%d_%d.jpg" % [ZOOM, tx, ty])
 	var img = Image.new()
-	if img.load(ProjectSettings.globalize_path(arquivo)) != OK:
+	var err = img.load(arquivo)
+	if err != OK:
+		if err != 19: # 19 = ERR_FILE_NOT_FOUND (silencia warnings normais de tiles fora da orla)
+			print("[Satelite] Falha ao carregar tile: %s (erro: %d)" % [arquivo, err])
 		return
 	var it = ImageTexture.new()
 	it.create_from_image(img, 0)
@@ -120,7 +123,7 @@ func _despachar_fila_http() -> void:
 		if _http_em_uso.has(req):
 			continue
 		var item = _fila_http.pop_front()
-		var url  = _base + ("z%d_%d_%d.png" % [ZOOM, item.tx, item.ty])
+		var url  = _base + ("z%d_%d_%d.jpg" % [ZOOM, item.tx, item.ty])
 		_http_em_uso[req] = str(item.tx) + "_" + str(item.ty)
 		req.connect("request_completed", self, "_on_tile_http",
 				[req, item.tx, item.ty], CONNECT_ONESHOT)

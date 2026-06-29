@@ -42,7 +42,7 @@ def tile_to_lonlat(tx: int, ty: int, z: int):
 
 
 def baixar_tile(tx: int, ty: int) -> bool:
-    nome    = f"z{ZOOM}_{tx}_{ty}.png"
+    nome    = f"z{ZOOM}_{tx}_{ty}.jpg"
     caminho = os.path.join(TILE_DIR, nome)
     if os.path.exists(caminho):
         return False   # já existe
@@ -96,7 +96,7 @@ def main():
     ja_tem   = sum(
         1 for tx in range(TX_MIN, TX_MAX + 1)
           for ty in range(TY_MIN, TY_MAX + 1)
-          if os.path.exists(os.path.join(TILE_DIR, f"z{ZOOM}_{tx}_{ty}.png"))
+          if os.path.exists(os.path.join(TILE_DIR, f"z{ZOOM}_{tx}_{ty}.jpg"))
     )
     a_baixar = total - ja_tem
 

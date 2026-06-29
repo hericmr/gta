@@ -89,6 +89,7 @@ var _col_cooldown:      Dictionary = {}
 onready var _camera: Camera2D          = $Camera2D
 onready var _radio:  AudioStreamPlayer = $Radio
 onready var _visual: Polygon2D         = $Visual
+onready var _sombra: Polygon2D         = $Sombra
 
 const FAIXAS = [
 	"res://assets/radio/radio1.mp3",
@@ -326,8 +327,12 @@ func _physics_process(delta: float) -> void:
 		_visual.modulate = Color(1, 1, 1)
 
 	# ── Zoom dinâmico ─────────────────────────────────────────────────────────
-	var zoom_alvo = lerp(0.55, 1.35, clamp(_velocity.length() / max_speed, 0.0, 1.0))
+	var zoom_alvo = lerp(1.2, 2.2, clamp(_velocity.length() / max_speed, 0.0, 1.0))
 	_camera.zoom  = Vector2(zoom_alvo, zoom_alvo)
+
+	# ── Atualiza a Sombra para manter o ângulo fixo global ───────────────────
+	if _sombra:
+		_sombra.position = _visual.position + Vector2(5.0, 5.0).rotated(-rotation)
 
 	emit_signal("velocidade_mudou", _velocity.length() * 0.131)
 

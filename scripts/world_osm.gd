@@ -37,18 +37,21 @@ var _ruas_nomeadas_chunk: Dictionary = {}  # "cx_cy" → Array de {nome, pts} pa
 # Chunk system
 var _predios_chunk:      Dictionary = {}  # "cx_cy" → Array de dados OSM
 var _predios_2p5d_chunk: Dictionary = {}  # "cx_cy" → Array de dados 2.5D
+var _arvores_chunk:      Dictionary = {}  # "cx_cy" → Array de Vector2 (coordenadas pré-escala)
 var _corpos_chunk:       Dictionary = {}  # "cx_cy" → StaticBody2D com colisões
 var _visuais_chunk:      Dictionary = {}  # "cx_cy" → Array de nodes visuais 2.5D
 var _dinamicos_chunk:    Dictionary = {}  # "cx_cy" → Array de dicts parallax
 var _chunk_player:       Vector2    = Vector2(-999.0, -999.0)
+
+var _tex_arvore_procedural: Texture = null
+var _tex_sombra_procedural: Texture = null
 
 # Mobile: flags de performance
 var _is_mobile:      bool = false
 var _round_prec:     int  = 32
 var _parallax_frame: int  = 0
 
-const TEX_GRAMA_SRC = preload("res://assets/texturas/grass03.png")
-const TILE_GRAMA    = 35.0   # unidades pré-escala por repetição de tile (35 u = 525 px de jogo)
+const MapFeatures = preload("res://scripts/map_features.gd")
 
 const URL_BASE         = "https://hericmr.github.io/gta"
 const URL_META         = URL_BASE + "/assets/tiles/meta.json"
@@ -62,6 +65,7 @@ var _html5_2p5d_ok     = false
 var _html5_features_ok = false
 
 var _dados_features    = null
+var _dados_meta        = null
 
 
 func _ready():
@@ -91,11 +95,20 @@ func _finalizar():
 	add_child(_corpo_global)
 	_indexar_predios_por_chunk()
 	_indexar_predios_2p5d_por_chunk()
+	_indexar_arvores_por_chunk()
 	_indexar_ruas_nomeadas()
-	print("[WorldOSM] %d prédios OSM e %d 2.5D indexados em chunks." % [
-		_dados["predios"].size(), (_dados_2p5d["predios"].size() if _dados_2p5d else 0)])
+	print("[WorldOSM] %d prédios OSM, %d 2.5D e %d árvores indexados em chunks." % [
+		_dados["predios"].size(),
+		(_dados_2p5d["predios"].size() if _dados_2p5d else 0),
+		(_dados_features.get("arvores", []).size() if _dados_features else 0)
+	])
 	# Garante que o próximo atualizar_parallax recarregue os chunks com os dados já indexados
 	_chunk_player = Vector2(-999.0, -999.0)
+	if OS.get_name() == "HTML5":
+		if _dados_meta != null:
+			_iniciar_satelite(_dados_meta, URL_BASE + "/assets/tiles/")
+	else:
+		_carregar_satelite()
 
 
 # ── Chunk system ──────────────────────────────────────────────────────────────
@@ -138,6 +151,17 @@ func _indexar_predios_2p5d_por_chunk() -> void:
 		_predios_2p5d_chunk[k].append(predio)
 
 
+func _indexar_arvores_por_chunk() -> void:
+	if _dados_features == null:
+		return
+	var arvores = _dados_features.get("arvores", [])
+	for pt in arvores:
+		var k = _chunk_key_pre(pt[0], pt[1])
+		if not _arvores_chunk.has(k):
+			_arvores_chunk[k] = []
+		_arvores_chunk[k].append(Vector2(pt[0], pt[1]))
+
+
 var _pos_pre_atual: Vector2 = Vector2.ZERO
 
 func _atualizar_chunks() -> void:
@@ -166,6 +190,9 @@ func _carregar_chunk(k: String) -> void:
 
 	for predio in _predios_chunk.get(k, []):
 		_criar_colisao_em(corpo, predio["pontos"])
+
+	for pos_arvore in _arvores_chunk.get(k, []):
+		_criar_arvore_em(corpo, pos_arvore, k)
 
 	var visuais:   Array = []
 	var dinamicos: Array = []
@@ -218,6 +245,50 @@ func _criar_colisao_em(corpo: StaticBody2D, pontos) -> void:
 	var forma = CollisionPolygon2D.new()
 	forma.polygon = pool
 	corpo.add_child(forma)
+
+
+func _criar_arvore_em(corpo: StaticBody2D, pos_arvore: Vector2, k: String) -> void:
+	var pos_jogo = pos_arvore * ESCALA
+	
+	# 1. Colisão do tronco (círculo pequeno de raio ~6px no jogo)
+	var col = CollisionShape2D.new()
+	var circle = CircleShape2D.new()
+	circle.radius = 6.0
+	col.shape = circle
+	col.position = pos_jogo
+	corpo.add_child(col)
+	
+	# Determinístico baseado na posição (escala varia de 0.85 a 1.2)
+	var seed_val = int(abs(pos_arvore.x * 123.45 + pos_arvore.y * 678.90)) % 1000
+	var escala_arvore = 0.85 + (seed_val / 1000.0) * 0.35
+	
+	# 2. Sombra da copa (abaixo de pedestres e carros)
+	var shadow = Sprite.new()
+	shadow.texture = _obter_textura_sombra_procedural()
+	shadow.scale = Vector2(escala_arvore, escala_arvore)
+	shadow.position = pos_jogo + Vector2(5.0, 7.0)
+	shadow.z_index = -5
+	corpo.add_child(shadow)
+	
+	# 3. Copa da árvore (acima dos carros e prédios de z_index baixo)
+	var canopy = Sprite.new()
+	canopy.texture = _obter_textura_arvore_procedural()
+	canopy.scale = Vector2(escala_arvore, escala_arvore)
+	canopy.position = pos_jogo + Vector2(0.0, -6.0)
+	canopy.z_index = 6
+	corpo.add_child(canopy)
+
+
+func _obter_textura_arvore_procedural() -> Texture:
+	if _tex_arvore_procedural == null:
+		_tex_arvore_procedural = MapFeatures.obter_textura_arvore_procedural()
+	return _tex_arvore_procedural
+
+
+func _obter_textura_sombra_procedural() -> Texture:
+	if _tex_sombra_procedural == null:
+		_tex_sombra_procedural = MapFeatures.obter_textura_sombra_procedural()
+	return _tex_sombra_procedural
 
 
 func _criar_predio_2p5d_lazy(corpo: StaticBody2D, predio: Dictionary, visuais_list: Array):
@@ -320,6 +391,18 @@ func _on_json_carregado(result, code, _headers, body):
 	_verificar_html5_pronto()
 
 func _fetch_meta():
+	var req = HTTPRequest.new()
+	add_child(req)
+	req.connect("request_completed", self, "_on_meta_carregado")
+	if req.request(URL_META) != OK:
+		_html5_meta_ok = true
+		_verificar_html5_pronto()
+
+func _on_meta_carregado(result, code, _headers, body):
+	if result == OK and code == 200:
+		_dados_meta = parse_json(body.get_string_from_utf8())
+		if _dados_meta:
+			print("[WorldOSM] meta.json OK")
 	_html5_meta_ok = true
 	_verificar_html5_pronto()
 
@@ -372,6 +455,13 @@ func _verificar_html5_pronto():
 
 # ── Desktop: File.open ────────────────────────────────────────────────────────
 
+func _iniciar_satelite(meta: Dictionary, caminho_base: String) -> void:
+	var stream = load("res://scripts/satelite_stream.gd").new()
+	stream.inicializar(null, meta, caminho_base)
+	add_child(stream)
+	set_meta("satelite_stream", stream)
+	print("[WorldOSM] Satélite pronto (zoom %d, base: %s)." % [meta["zoom"], caminho_base])
+
 func _carregar_satelite():
 	var arq = File.new()
 	if not arq.file_exists(CAMINHO_META):
@@ -381,11 +471,8 @@ func _carregar_satelite():
 	arq.open(CAMINHO_META, File.READ)
 	var meta = parse_json(arq.get_as_text())
 	arq.close()
-	var stream = load("res://scripts/satelite_stream.gd").new()
-	stream.inicializar(null, meta, "res://assets/tiles/")
-	add_child(stream)
-	set_meta("satelite_stream", stream)
-	print("[WorldOSM] Satélite pronto (zoom %d)." % meta["zoom"])
+	if meta:
+		_iniciar_satelite(meta, "res://assets/tiles/")
 
 func _carregar_json():
 	var arq = File.new()
@@ -638,99 +725,8 @@ func _tex_repetida(src: Texture) -> ImageTexture:
 
 
 func _criar_features(dados: Dictionary) -> void:
-	# Mar / Oceano Atlântico (z=-9) — abaixo da praia e dos jardins
-	for f in dados.get("mar", []):
-		var poly = Polygon2D.new()
-		var pts  = PoolVector2Array()
-		for p in f["poly_px"]:
-			pts.append(Vector2(p[0], p[1]))
-		if pts.size() < 3:
-			continue
-		poly.polygon = pts
-		poly.color   = Color(0.12, 0.35, 0.68, 0.70)
-		poly.z_index = -38
-		add_child(poly)
+	MapFeatures.criar_features(self, dados)
 
-	# Porto/industrial (z=-9, mesmo nível do mar mas adicionado depois → fica na frente)
-	for f in dados.get("porto", []):
-		var poly = Polygon2D.new()
-		var pts  = PoolVector2Array()
-		for p in f["poly_px"]:
-			pts.append(Vector2(p[0], p[1]))
-		if pts.size() < 3:
-			continue
-		poly.polygon = pts
-		poly.color   = Color(0.38, 0.32, 0.28, 0.75)
-		poly.z_index = -38
-		add_child(poly)
-
-	# Praia — areia (z=-8, adicionada antes do verde → verde (jardins) fica na frente)
-	for f in dados.get("praia", []):
-		var poly = Polygon2D.new()
-		var pts  = PoolVector2Array()
-		for p in f["poly_px"]:
-			pts.append(Vector2(p[0], p[1]))
-		if pts.size() < 3:
-			continue
-		poly.polygon = pts
-		poly.color   = Color(0.87, 0.82, 0.62, 0.80)
-		poly.z_index = -37
-		add_child(poly)
-
-	# Parques e jardins (z=-8) — textura de grama com tiling
-	var tex_grama = _obter_textura_grama_procedural()
-	for f in dados.get("verde", []):
-		var poly = Polygon2D.new()
-		var pts  = PoolVector2Array()
-		var uvs  = PoolVector2Array()
-		for p in f["poly_px"]:
-			pts.append(Vector2(p[0], p[1]))
-			uvs.append(Vector2(p[0] / TILE_GRAMA, p[1] / TILE_GRAMA))
-		if pts.size() < 3:
-			continue
-		poly.polygon = pts
-		poly.uv      = uvs
-		poly.texture = tex_grama
-		poly.color   = Color(1.0, 1.0, 1.0, 1.0)
-		poly.z_index = -24
-		add_child(poly)
-
-	# Corpos d'água — polígonos (z=-7)
-	for f in dados.get("agua", []):
-		var poly = Polygon2D.new()
-		var pts  = PoolVector2Array()
-		for p in f["poly_px"]:
-			pts.append(Vector2(p[0], p[1]))
-		if pts.size() < 3:
-			continue
-		poly.polygon = pts
-		poly.color   = Color(0.18, 0.45, 0.72, 0.85)
-		poly.z_index = -36
-		add_child(poly)
-
-	# Canais — linhas largas (z=-6)
-	for c in dados.get("canais", []):
-		var pts = c["pontos"]
-		if pts.size() < 2:
-			continue
-		var linha = Line2D.new()
-		for p in pts:
-			linha.add_point(Vector2(p[0], p[1]))
-		linha.default_color  = Color(0.18, 0.50, 0.78, 0.90)
-		linha.width          = c.get("largura", 15.0)
-		linha.joint_mode     = Line2D.LINE_JOINT_ROUND
-		linha.begin_cap_mode = Line2D.LINE_CAP_ROUND
-		linha.end_cap_mode   = Line2D.LINE_CAP_ROUND
-		linha.z_index        = -35
-		add_child(linha)
-
-	print("[WorldOSM] Features: mar=%d porto=%d praia=%d verde=%d agua=%d canais=%d" % [
-		len(dados.get("mar",    [])),
-		len(dados.get("porto",  [])),
-		len(dados.get("praia",  [])),
-		len(dados.get("verde",  [])),
-		len(dados.get("agua",   [])),
-		len(dados.get("canais", []))])
 
 
 func _indexar_ruas_nomeadas() -> void:
@@ -847,58 +843,7 @@ func _obter_textura_pontilhada() -> Texture:
 	return _tex_pontilhado
 
 
-func _obter_textura_grama_procedural() -> Texture:
-	var img = Image.new()
-	img.create(16, 16, false, Image.FORMAT_RGBA8)
-	img.lock()
-	
-	var rng = RandomNumberGenerator.new()
-	rng.seed = 12345
-	
-	# 1. Pinta o fundo com um verde escuro denso com leve ruído pixelado
-	for x in range(16):
-		for y in range(16):
-			var r = rng.randf()
-			# Tom base de grama verde escuro
-			var base_g = 0.18 + r * 0.05
-			var c = Color(base_g * 0.5, base_g, base_g * 0.5, 1.0)
-			img.set_pixel(x, y, c)
-			
-	# 2. Desenha pequenos tufos de grama em pixel art (verde médio e claro)
-	var cor_tufo_escura = Color(0.12, 0.35, 0.12, 1.0)
-	var cor_tufo_clara  = Color(0.20, 0.52, 0.20, 1.0)
-	
-	# Lista de posições de tufos (x, y) na grade 16x16
-	var tufos = [
-		Vector2(3, 4),
-		Vector2(11, 2),
-		Vector2(6, 11),
-		Vector2(13, 10)
-	]
-	
-	for t in tufos:
-		var tx = int(t.x)
-		var ty = int(t.y)
-		# Desenha a pontinha do tufo (clara)
-		img.set_pixel(tx, ty, cor_tufo_clara)
-		# Desenha a base do tufo (média/escura)
-		img.set_pixel((tx - 1 + 16) % 16, (ty + 1) % 16, cor_tufo_escura)
-		img.set_pixel(tx, (ty + 1) % 16, cor_tufo_escura)
-		img.set_pixel((tx + 1) % 16, (ty + 1) % 16, cor_tufo_escura)
 
-	# 3. Desenha algumas folhas soltas (pontos de 1 pixel verde claro)
-	var folhas = [
-		Vector2(1, 1), Vector2(8, 2), Vector2(14, 5),
-		Vector2(2, 9), Vector2(9, 8), Vector2(5, 14)
-	]
-	for f in folhas:
-		img.set_pixel(int(f.x), int(f.y), cor_tufo_clara)
-		
-	img.unlock()
-	
-	var tex = ImageTexture.new()
-	tex.create_from_image(img, Texture.FLAG_REPEAT) # Sem filtragem para manter o pixel art
-	return tex
 
 
 func _obter_textura_pedra_portuguesa() -> Texture:

@@ -73,6 +73,32 @@ def clipar_ao_bbox(coords, m):
             and m["lat_min"] <= c[1] <= m["lat_max"]]
 
 
+def interpolar_linha(coords_px, spacing=10.0):
+    """Interpola pontos ao longo de uma linha com espaçamento fixo em pixels."""
+    pts = []
+    if not coords_px:
+        return pts
+    pts.append(coords_px[0])
+    acum = 0.0
+    for i in range(len(coords_px) - 1):
+        p1 = coords_px[i]
+        p2 = coords_px[i+1]
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+        dist = math.sqrt(dx*dx + dy*dy)
+        if dist == 0:
+            continue
+        pos = spacing - acum
+        while pos <= dist:
+            t = pos / dist
+            x = p1[0] + t * dx
+            y = p1[1] + t * dy
+            pts.append([round(x, 1), round(y, 1)])
+            pos += spacing
+        acum = dist - (pos - spacing)
+    return pts
+
+
 def montar_aneis(segmentos):
     """
     Recebe lista de segmentos [(lon,lat), ...] e tenta montar anéis fechados
@@ -137,8 +163,17 @@ def main():
     root = tree.getroot()
 
     nodes = {}
+    arvores = []
     for n in root.findall("node"):
-        nodes[n.get("id")] = (float(n.get("lon")), float(n.get("lat")))
+        lon = float(n.get("lon"))
+        lat = float(n.get("lat"))
+        nodes[n.get("id")] = (lon, lat)
+
+        # Extrai árvores individuais
+        tags = {t.get("k"): t.get("v") for t in n.findall("tag")}
+        if tags.get("natural") == "tree":
+            if m["lon_min"] <= lon <= m["lon_max"] and m["lat_min"] <= lat <= m["lat_max"]:
+                arvores.append(to_px(lon, lat, m))
 
     ways_refs = {}
     for w in root.findall("way"):
@@ -222,8 +257,8 @@ def main():
         is_verde = (
             tags.get("leisure") in ("park", "garden") or
             tags.get("landuse") in ("grass", "greenfield", "recreation_ground",
-                                    "meadow", "village_green") or
-            tags.get("natural") in ("grassland", "wetland", "scrub") or
+                                    "meadow", "village_green", "forest") or
+            tags.get("natural") in ("grassland", "wetland", "scrub", "wood") or
             tags.get("tourism") == "zoo"
         )
         if is_verde:
@@ -255,6 +290,17 @@ def main():
             ign["sem_nos"] += 1
             continue
 
+        # Fileiras de árvores (linhas)
+        if tags.get("natural") == "tree_row":
+            pts = [c for c in coords
+                   if m["lon_min"] <= c[0] <= m["lon_max"]
+                   and m["lat_min"] <= c[1] <= m["lat_max"]]
+            if len(pts) >= 2:
+                pts_px = [to_px(c[0], c[1], m) for c in pts]
+                row_pts = interpolar_linha(pts_px, spacing=10.0)
+                arvores.extend(row_pts)
+            continue
+
         # Canais (linhas)
         if tags.get("waterway") == "canal" and tags.get("tunnel") != "culvert":
             pts = clipar_ao_bbox(coords, m)
@@ -279,10 +325,10 @@ def main():
         nat = tags.get("natural", "")
         lei = tags.get("leisure", "")
         is_relevante = (
-            nat in ("beach", "water") or
+            nat in ("beach", "water", "wood") or
             lei in ("park", "garden") or
             tags.get("landuse") in ("harbour", "port", "industrial",
-                                    "grass", "greenfield", "recreation_ground")
+                                    "grass", "greenfield", "recreation_ground", "forest")
         )
         if not is_relevante:
             continue
@@ -297,6 +343,7 @@ def main():
     print(f"     Água (polígono): {len(agua)}")
     print(f"     Porto/industrial:{len(porto)}")
     print(f"     Mar:             {len(mar)}")
+    print(f"     Árvores:         {len(arvores)}")
     print(f"     Ignorados:       fora={ign['fora']}  pequeno={ign['pequeno']}  sem_nós={ign['sem_nos']}")
 
     os.makedirs("maps", exist_ok=True)
@@ -307,6 +354,7 @@ def main():
         "agua":   agua,
         "porto":  porto,
         "mar":    mar,
+        "arvores": arvores,
     }
     with open(OUTPUT, "w", encoding="utf-8") as f:
         json.dump(saida, f, ensure_ascii=False, separators=(",", ":"))

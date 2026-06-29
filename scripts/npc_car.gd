@@ -88,6 +88,9 @@ var _fator_tick:  int     = 0
 var modelo_idx:   int     = 0
 var _sensor_peds: Area2D  = null
 
+var _visual:      Polygon2D = null
+var _sombra:      Polygon2D = null
+
 signal chegou_ao_fim
 
 var _congelado: bool = false
@@ -117,19 +120,32 @@ func _ready() -> void:
 	modelo_idx = randi() % MODELOS.size()
 	var modelo = MODELOS[modelo_idx]
 
-	var v = Polygon2D.new()
-	v.name = "Visual"
-	v.texture  = modelo["textura"]
-	v.polygon  = POLIGONO
-	v.position = Vector2(73.5, 150.0)
-	v.rotation = PI
-	v.scale    = Vector2(2.037, 1.944)
+	# ── Criar Sombra ──────────────────────────────────────────────────────────
+	_sombra = Polygon2D.new()
+	_sombra.name = "Sombra"
+	_sombra.texture = modelo["textura"]
+	_sombra.polygon = POLIGONO
+	_sombra.position = Vector2(73.5, 150.0) + Vector2(5.0, 5.0)
+	_sombra.rotation = PI
+	_sombra.scale = Vector2(2.037, 1.944)
+	_sombra.color = Color(0.0, 0.0, 0.0, 0.4)
+	_sombra.z_index = -1
+	add_child(_sombra)
+
+	# ── Criar Visual ──────────────────────────────────────────────────────────
+	_visual = Polygon2D.new()
+	_visual.name = "Visual"
+	_visual.texture  = modelo["textura"]
+	_visual.polygon  = POLIGONO
+	_visual.position = Vector2(73.5, 150.0)
+	_visual.rotation = PI
+	_visual.scale    = Vector2(2.037, 1.944)
 	
 	if modelo_idx == 3 and randf() < 0.5:
-		v.color = Color(0.95, 0.82, 0.08) # Amarelo Táxi
+		_visual.color = Color(0.95, 0.82, 0.08) # Amarelo Táxi
 	else:
-		v.color = CORES[randi() % CORES.size()]
-	add_child(v)
+		_visual.color = CORES[randi() % CORES.size()]
+	add_child(_visual)
 
 	var shape = RectangleShape2D.new()
 	shape.extents = Vector2(30.0, 58.0)
@@ -221,6 +237,9 @@ func _physics_process(delta: float) -> void:
 	var fator = _fator_proximidade()
 	move_and_slide(-transform.y * _vel * fator)
 
+	if _sombra:
+		_sombra.position = _visual.position + Vector2(5.0, 5.0).rotated(-rotation)
+
 	# ── Detecção de travamento (amostra a cada STUCK_TEMPO segundos) ─────────
 	_check_timer += delta
 	if _check_timer >= STUCK_TEMPO:
@@ -259,7 +278,7 @@ func _fator_proximidade() -> float:
 		# Comprimento dinâmico baseado no tipo de veículo (para distância de colisão origin-to-origin)
 		var half_len_outro = 58.0
 		if outro.is_in_group("npc_onibus"):
-			half_len_outro = 124.0
+			half_len_outro = 83.0
 		elif outro.is_in_group("player_car"):
 			half_len_outro = 61.0
 

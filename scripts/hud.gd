@@ -16,7 +16,6 @@ const CORES_COMBO   = [
 ]
 
 onready var _label:       Label  = $Control/LabelVel
-onready var _label_debug: Label  = $Control/LabelDebug
 onready var _label_score: Label  = $Control/LabelScore
 onready var _label_combo: Label  = $Control/LabelCombo
 onready var _label_rua:   Label  = $Control/LabelRua
@@ -31,12 +30,14 @@ var _combo_timer:     float = 0.0
 var _combo_pos_base:  float = 0.0
 var _rua_atual:       String = ""
 var _rua_fade_t:      float  = 0.0
+var _minimapa                = null
 
 
 func _ready() -> void:
 	add_to_group("hud")
 	_label_combo.rect_scale = Vector2(3.0, 3.0)
 	_combo_pos_base = _label_combo.rect_position.y
+	_criar_minimapa()
 
 
 func atualizar_velocidade(kmh: float) -> void:
@@ -98,4 +99,26 @@ func _process(delta: float) -> void:
 	var deslocamento_units = _ref_node.position.distance_to(_pos_anterior) / delta
 	_pos_anterior = _ref_node.position
 	var kmh_real = deslocamento_units * M_POR_GAME_UNIT * 3.6
-	_label_debug.text = "real: %d km/h" % int(kmh_real)
+
+	if _minimapa:
+		_minimapa.atualizar(_ref_node.position, _ref_node.rotation)
+
+
+func _criar_minimapa() -> void:
+	var MiniMapaScript = load("res://scripts/minimapa.gd")
+	_minimapa = Control.new()
+	_minimapa.name = "MiniMapa"
+	_minimapa.set_script(MiniMapaScript)
+	
+	# Configura posição e âncoras (Canto Superior Esquerdo: 110x110 px)
+	_minimapa.anchor_left = 0.0
+	_minimapa.anchor_right = 0.0
+	_minimapa.margin_left = 20.0
+	_minimapa.margin_top = 20.0
+	_minimapa.margin_right = 130.0
+	_minimapa.margin_bottom = 130.0
+	_minimapa.rect_min_size = Vector2(110, 110)
+	_minimapa.rect_size = Vector2(110, 110)
+	_minimapa.rect_clip_content = false
+	
+	$Control.add_child(_minimapa)

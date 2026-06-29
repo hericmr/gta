@@ -13,6 +13,7 @@ const URL_LINHAS = "https://hericmr.github.io/gta/newdata/linhas_onibus.json"
 var _linhas: Array = []   # [{wps_ida, wps_volta, par_ida, par_volta}]
 var _onibus: Array = []
 var _ref           = null
+var _ruas_grid: Dictionary = {}
 
 
 func _ready() -> void:
@@ -57,6 +58,7 @@ func _carregar_linhas() -> void:
 
 
 func _processar_linhas(dados: Dictionary) -> void:
+	_construir_grid_ruas()
 	for linha in dados.get("linhas", []):
 		var wps_ida   = _to_wps(linha.get("percurso_ida_px",   []))
 		var wps_volta = _to_wps(linha.get("percurso_volta_px", []))
@@ -189,10 +191,46 @@ func _on_fim_onibus(onibus, linha_idx: int, era_ida: bool) -> void:
 
 # ── Alinhamento de Rota GPS à Rede de Vias ────────────────────────────────────
 
-func _ajustar_ponto_na_rua(p: Vector2, ruas: Array) -> Vector2:
+func _construir_grid_ruas() -> void:
+	_ruas_grid.clear()
+	var traffic = get_parent().get_node_or_null("NpcTraffic")
+	var ruas = traffic._ruas_carro if (traffic and "_ruas_carro" in traffic) else []
+	if ruas.empty():
+		return
+	for r in ruas:
+		var wps = r["wps"]
+		if wps.empty():
+			continue
+		var min_x = 999999.0
+		var max_x = -999999.0
+		var min_y = 999999.0
+		var max_y = -999999.0
+		for pt in wps:
+			if pt.x < min_x: min_x = pt.x
+			if pt.x > max_x: max_x = pt.x
+			if pt.y < min_y: min_y = pt.y
+			if pt.y > max_y: max_y = pt.y
+		var cell_x_min = int((min_x - 450.0) / 1000.0)
+		var cell_x_max = int((max_x + 450.0) / 1000.0)
+		var cell_y_min = int((min_y - 450.0) / 1000.0)
+		var cell_y_max = int((max_y + 450.0) / 1000.0)
+		for cx in range(cell_x_min, cell_x_max + 1):
+			for cy in range(cell_y_min, cell_y_max + 1):
+				var key = str(cx) + "_" + str(cy)
+				if not _ruas_grid.has(key):
+					_ruas_grid[key] = []
+				_ruas_grid[key].append(r)
+
+
+func _ajustar_ponto_na_rua(p: Vector2, _ruas_original: Array) -> Vector2:
+	var key = str(int(p.x / 1000.0)) + "_" + str(int(p.y / 1000.0))
+	var ruas_candidatas = _ruas_grid.get(key, [])
+	if ruas_candidatas.empty():
+		return p
+
 	var melhor_p = p
 	var melhor_dist = 999999.0
-	for rua in ruas:
+	for rua in ruas_candidatas:
 		var wps = rua["wps"]
 		for i in range(1, wps.size()):
 			var s1 = wps[i - 1]

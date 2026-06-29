@@ -263,6 +263,9 @@ func _physics_process(delta: float) -> void:
 	if _morto:
 		return
 
+	if _sombra and _sprite:
+		_sombra.position = _sprite.position + Vector2(4.0, 4.0).rotated(-rotation)
+
 	if _esperando_onibus:
 		_tempo_idle -= delta
 		if _tempo_idle <= 0.0:

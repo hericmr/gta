@@ -42,6 +42,9 @@ const STUCK_INTERVALO  = 3.0      # amostra posição a cada 3 s
 const STUCK_MIN_DIST   = 200.0    # deve mover ao menos 200 px em 3 s para não ser stuck
 const STUCK_LIMITE     = 9.0      # após 9 s parado → despawn (3 intervalos)
 
+var _visual:      Node2D = null
+var _sombra:      Node2D = null
+
 signal chegou_ao_fim
 
 
@@ -58,10 +61,10 @@ func _ready() -> void:
 	_sensor_peds.collision_layer = 0
 	_sensor_peds.collision_mask  = 8 # Camada 4: Pedestres e Player
 	var s_shape = RectangleShape2D.new()
-	s_shape.extents = Vector2(50.0, 110.0) # Largura 100px, comprimento 220px
+	s_shape.extents = Vector2(33.0, 73.0) # Proporcional ao novo tamanho do ônibus
 	var s_col = CollisionShape2D.new()
 	s_col.shape = s_shape
-	s_col.position = Vector2(0.0, -234.0) # Centralizado em frente ao parachoque dianteiro (origin a partir do centro)
+	s_col.position = Vector2(0.0, -156.0) # Centralizado em frente ao parachoque dianteiro
 	_sensor_peds.add_child(s_col)
 	add_child(_sensor_peds)
 
@@ -69,34 +72,62 @@ func _ready() -> void:
 func _criar_visual() -> void:
 	var tex = load(_TEX_PATH) if ResourceLoader.exists(_TEX_PATH) else null
 	if tex:
-		var sprite     = Sprite.new()
-		sprite.texture = tex
-		# SP_013.png: 44×83 px → scale 3.0 → 132×249 px no jogo
-		sprite.scale   = Vector2(3.0, 3.0)
-		add_child(sprite)
+		# Sombra
+		_sombra = Sprite.new()
+		_sombra.name = "Sombra"
+		_sombra.texture = tex
+		_sombra.scale   = Vector2(2.0, 2.0) # Escala unificada 2x
+		_sombra.modulate = Color(0.0, 0.0, 0.0, 0.4)
+		_sombra.position = Vector2(5.0, 5.0)
+		_sombra.z_index = -1
+		add_child(_sombra)
+
+		# Visual
+		_visual = Sprite.new()
+		_visual.name = "Visual"
+		_visual.texture = tex
+		_visual.scale   = Vector2(2.0, 2.0) # Escala unificada 2x
+		add_child(_visual)
 	else:
+		# Sombra
+		var shadow_poly = Polygon2D.new()
+		shadow_poly.name = "Sombra"
+		shadow_poly.polygon = PoolVector2Array([
+			Vector2(-30, -83), Vector2(30, -83),
+			Vector2(30,  83),  Vector2(-30,  83),
+		])
+		shadow_poly.color = Color(0.0, 0.0, 0.0, 0.4)
+		shadow_poly.position = Vector2(5.0, 5.0)
+		shadow_poly.z_index = -1
+		_sombra = shadow_poly
+		add_child(_sombra)
+
+		# Visual
 		var rect  = Polygon2D.new()
+		rect.name = "Visual"
 		rect.color = Color(0.85, 0.55, 0.10)
 		rect.polygon = PoolVector2Array([
-			Vector2(-45, -130), Vector2(45, -130),
-			Vector2(45,  130),  Vector2(-45,  130),
+			Vector2(-30, -83), Vector2(30, -83),
+			Vector2(30,  83),  Vector2(-30,  83),
 		])
-		add_child(rect)
+		_visual = rect
+		add_child(_visual)
+		
 		for i in range(-3, 4):
 			var janela = Polygon2D.new()
 			janela.color = Color(0.55, 0.75, 0.95, 0.8)
-			var yc = i * 36.0
+			var yc = i * 24.0
 			janela.polygon = PoolVector2Array([
-				Vector2(-32, yc - 12), Vector2(32, yc - 12),
-				Vector2(32,  yc + 12), Vector2(-32, yc + 12),
+				Vector2(-21, yc - 8), Vector2(21, yc - 8),
+				Vector2(21,  yc + 8), Vector2(-21, yc + 8),
 			])
 			add_child(janela)
 
 
 func _criar_colisao() -> void:
 	var shape = RectangleShape2D.new()
-	# SP_013.png: 44×83 px × scale 3.0 → 132×249 → extents = metade
-	shape.extents = Vector2(66.0, 124.0)
+	# SP_013.png: 44×83 px × scale 2.0 → 88×166 → extents = metade (44x83)
+	shape.extents = Vector2(44.0, 83.0)
 	var col = CollisionShape2D.new()
 	col.shape = shape
 	add_child(col)
@@ -123,6 +154,9 @@ func _physics_process(delta: float) -> void:
 		Estado.DIRIGINDO:      _tick_dirigindo(delta)
 		Estado.FREANDO_PARADA: _tick_freando(delta)
 		Estado.PARADO_PONTO:   _tick_parado(delta)
+
+	if _sombra and _visual:
+		_sombra.position = _visual.position + Vector2(5.0, 5.0).rotated(-rotation)
 
 
 func _proximo_eh_parada() -> bool:
@@ -329,11 +363,11 @@ func _fator_proximidade() -> float:
 
 		var half_len_outro = 58.0
 		if outro.is_in_group("npc_onibus"):
-			half_len_outro = 124.0
+			half_len_outro = 83.0
 		elif outro.is_in_group("player_car"):
 			half_len_outro = 61.0
 
-		var dist_min = 124.0 + half_len_outro + 40.0
+		var dist_min = 83.0 + half_len_outro + 27.0
 		var dist_max = dist_min + 250.0
 
 		if dist > dist_max:
@@ -354,7 +388,7 @@ func _fator_proximidade() -> float:
 			var delta_pos = ped.position - position
 			var dist = delta_pos.length()
 
-			var dist_min = 124.0 + 10.0 + 40.0  # 124px (ônibus) + 10px (pedestre) + 40px margem
+			var dist_min = 83.0 + 10.0 + 27.0  # 83px (ônibus) + 10px (pedestre) + 27px margem
 			var dist_max = dist_min + 180.0
 
 			var f = (dist - dist_min) / (dist_max - dist_min)

@@ -21,7 +21,7 @@ onready var _onibus   = $NpcOnibusTraffic
 onready var _touch_ui = $TouchUI/Control
 
 func _ready() -> void:
-	OS.window_fullscreen = true
+	OS.window_fullscreen = false
 	randomize()
 
 	# Conecta os sinais de HUD e do Spawn pelo Mapa
@@ -52,7 +52,7 @@ func _process(delta: float) -> void:
 			# Sincroniza o zoom da câmera com a velocidade do ônibus, igual ao do carro
 			var speed_len = _onibus_atual._velocity.length()
 			var spd_frac = clamp(speed_len / 774.0, 0.0, 1.0)
-			var zoom_alvo = lerp(1.15, 1.85, spd_frac)
+			var zoom_alvo = lerp(2.15, 2.85, spd_frac)
 			var cam = _player.get_node("Camera2D")
 			cam.zoom = Vector2(zoom_alvo, zoom_alvo)
 		else:
